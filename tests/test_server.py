@@ -78,13 +78,14 @@ async def test_daftar_ti_sesi():
 @pytest.mark.asyncio
 async def test_buat_ti_sesi():
     payload = {"id": "uuid-ti-baru", "unit": "SMP", "status": "DRAFT"}
-    with patch(_POST, new_callable=AsyncMock, return_value=payload):
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "buat_ti_sesi",
-                {"unit": "SMP", "kategori_jabatan": "guru", "periode": "2025/2026"},
+                {"jabatan_id": "jbt_a1b2", "periode": "2026-06", "unit": "SMP"},
             )
     assert result.data["id"] == "uuid-ti-baru"
+    assert m.await_args.kwargs["body"]["jabatan_id"] == "jbt_a1b2"
 
 
 @pytest.mark.asyncio
@@ -230,30 +231,25 @@ async def test_dcs_submit_jawaban():
 
 @pytest.mark.asyncio
 async def test_daftar_tugas_pokok():
-    payload = {"items": [{"id": "tp-1", "kode": "TP-001", "nama": "Mengajar"}], "total": 1}
+    payload = {"items": [{"id": "tp-1", "jabatan_id": "jbt_1", "nama": "Mengajar"}], "total": 1}
     with patch(_GET, new_callable=AsyncMock, return_value=payload):
         async with Client(mcp) as client:
             result = await client.call_tool("daftar_tugas_pokok", {})
     assert result.data["total"] == 1
-    assert result.data["items"][0]["kode"] == "TP-001"
+    assert result.data["items"][0]["nama"] == "Mengajar"
 
 
 @pytest.mark.asyncio
 async def test_buat_tugas_pokok():
-    payload = {"id": "tp-baru", "kode": "TP-002", "nama": "Mengajar Matematika"}
+    payload = {"id": "tp-baru", "jabatan_id": "jbt_1", "nama": "Mengajar Matematika"}
     with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "buat_tugas_pokok",
-                {
-                    "kode": "TP-002",
-                    "nama": "Mengajar Matematika",
-                    "unit": "SMP",
-                    "kategori_jabatan": "guru",
-                },
+                {"jabatan_id": "jbt_1", "nama": "Mengajar Matematika"},
             )
     assert result.data["id"] == "tp-baru"
-    assert m.await_args.kwargs["body"]["kode"] == "TP-002"
+    assert m.await_args.kwargs["body"]["jabatan_id"] == "jbt_1"
 
 
 @pytest.mark.asyncio
@@ -308,15 +304,22 @@ async def test_daftar_uraian_tugas():
 
 @pytest.mark.asyncio
 async def test_buat_uraian_tugas():
-    payload = {"id": "ut-baru", "kode": "UT-002", "nama": "Menyusun KD"}
+    payload = {"id": "ut-baru", "kode": "UT-002", "uraian": "Menyusun KD"}
     with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "buat_uraian_tugas",
-                {"kode": "UT-002", "nama": "Menyusun KD", "detil_tugas_id": "dt-1"},
+                {
+                    "kode": "UT-002",
+                    "uraian": "Menyusun KD",
+                    "unit": "SMP",
+                    "urutan": 1,
+                    "tugas_pokok_id": "tp-1",
+                    "detil_tugas_id": "dt-1",
+                },
             )
     assert result.data["id"] == "ut-baru"
-    assert m.await_args.kwargs["body"]["detil_tugas_id"] == "dt-1"
+    assert m.await_args.kwargs["body"]["tugas_pokok_id"] == "tp-1"
 
 
 @pytest.mark.asyncio

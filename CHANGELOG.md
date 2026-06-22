@@ -6,6 +6,27 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-22
+
+### Changed (Breaking)
+
+- **`buat_ti_sesi`**: parameter `kategori_jabatan` dihapus; `jabatan_id` kini argumen posisional
+  wajib pertama (sebelumnya opsional).
+- **`buat_tugas_pokok`**: parameter `jabatan_id` (wajib) ditambahkan; parameter lama `unit`
+  dan `kategori_jabatan` dihapus — jabatan ditetapkan di level TugasPokok.
+- **`ti_catalog`**: parameter `kategori_jabatan` diganti dengan `jabatan_id`.
+- **`buat_uraian_tugas`**: kini memerlukan `kode`, `uraian`, `unit`, `urutan`, `tugas_pokok_id`
+  (wajib); `jabatan_id` diwarisi otomatis dari `TugasPokok`.
+- **`perbarui_uraian_tugas`**: parameter `nama` diganti `uraian`; `jabatan_id` dan `deskripsi`
+  dihapus.
+
+## [0.5.0] - 2026-06-22
+
+### Changed
+
+- Docstring tool TI dan SME panel diperbarui sesuai perubahan perilaku backend v0.13.0
+  (unit sesi TI opsional, partisipan bebas ke panel SME).
+
 ## [0.4.0] - 2026-06-22
 
 ### Added
