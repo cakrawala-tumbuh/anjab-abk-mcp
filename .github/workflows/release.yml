@@ -1,0 +1,20 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # untuk membuat GitHub Release
+  packages: write   # untuk push image ke GHCR
+
+jobs:
+  github-release:
+    uses: cakrawala-tumbuh/github-release/.github/workflows/release.yml@v1
+    secrets: inherit
+
+  docker-image:
+    uses: cakrawala-tumbuh/release-docker-image-ghcr/.github/workflows/ghcr.yml@v2
+    with:
+      dockerfile: Dockerfile
+    secrets: inherit

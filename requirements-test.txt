@@ -1,0 +1,11 @@
+# Tooling lint + unit test. Versi DIPIN agar identik antara lokal dan CI.
+# Dipakai oleh skill `automated-test` (Makefile + Dockerfile.test).
+# Lint gate = ruff + isort + black; unit = pytest. respx/httpx untuk mock HTTP
+# (mis. userinfo Authentik) di test auth. Jangan biarkan tanpa pin.
+black==24.10.0
+isort==5.13.2
+ruff==0.8.6
+pytest==8.3.4
+pytest-asyncio==0.25.2
+respx==0.21.1
+httpx==0.28.1
