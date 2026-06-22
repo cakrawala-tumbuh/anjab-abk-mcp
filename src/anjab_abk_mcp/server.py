@@ -3018,3 +3018,515 @@ async def ts_kuesioner_saya(ctx: Context) -> dict:
         return await backend_get("/api/v1/time-study/kuesioner/saya", ctx=ctx)
     except BackendError as exc:
         _raise_tool_error(exc)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# TASK INVENTORY — master data catalog: TugasPokok, DetilTugas, UraianTugas
+# ════════════════════════════════════════════════════════════════════════════════
+
+
+@mcp.tool
+async def daftar_tugas_pokok(
+    ctx: Context,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Ambil daftar Tugas Pokok (master katalog Task Inventory).
+
+    Tugas Pokok adalah entri katalog tingkat pertama pada Task Inventory,
+    mewakili tugas-tugas utama sebuah jabatan sebelum dipecah menjadi
+    Detil Tugas dan Uraian Tugas.
+
+    Args:
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict dengan keys ``items`` (list tugas pokok) dan ``total`` (total record).
+    """
+    try:
+        return await backend_get(
+            "/api/v1/task-inventory/tugas-pokok", ctx=ctx, limit=limit, offset=offset
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def buat_tugas_pokok(
+    ctx: Context,
+    kode: str,
+    nama: str,
+    unit: str,
+    kategori_jabatan: str,
+    deskripsi: str | None = None,
+    urutan: int = 0,
+) -> dict:
+    """Buat entri Tugas Pokok baru pada katalog Task Inventory.
+
+    Args:
+        kode: Kode unik tugas pokok (mis. ``TP-001``).
+        nama: Nama tugas pokok.
+        unit: Nama unit kerja / satuan pendidikan yang dirujuk.
+        kategori_jabatan: Kategori jabatan yang diasosiasikan dengan tugas ini
+            (mis. ``guru``, ``kepala sekolah``).
+        deskripsi: Deskripsi singkat tugas pokok (opsional).
+        urutan: Urutan tampil dalam katalog (default 0).
+
+    Returns:
+        Data tugas pokok yang baru dibuat termasuk ``id`` (UUID).
+    """
+    body: dict = {
+        "kode": kode,
+        "nama": nama,
+        "unit": unit,
+        "kategori_jabatan": kategori_jabatan,
+        "urutan": urutan,
+    }
+    if deskripsi is not None:
+        body["deskripsi"] = deskripsi
+    try:
+        return await backend_post("/api/v1/task-inventory/tugas-pokok", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def cari_tugas_pokok(
+    ctx: Context,
+    domain: list | None = None,
+    order: list | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Cari Tugas Pokok dengan domain bergaya Odoo.
+
+    Args:
+        domain: Kriteria pencarian, mis.
+            ``[["kategori_jabatan", "=", "guru"]]``.
+        order: Urutan hasil, mis. ``[["urutan", "asc"]]``.
+        limit: Jumlah item per halaman (default 20).
+        offset: Item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``items`` + ``total`` hasil pencarian.
+    """
+    body = {"domain": domain or [], "order": order or [], "limit": limit, "offset": offset}
+    try:
+        return await backend_post("/api/v1/task-inventory/tugas-pokok/search", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def detail_tugas_pokok(ctx: Context, tp_id: str) -> dict:
+    """Ambil satu Tugas Pokok berdasarkan ID.
+
+    Args:
+        tp_id: UUID tugas pokok.
+
+    Returns:
+        Data tugas pokok.
+    """
+    try:
+        return await backend_get(f"/api/v1/task-inventory/tugas-pokok/{tp_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def perbarui_tugas_pokok(
+    ctx: Context,
+    tp_id: str,
+    kode: str | None = None,
+    nama: str | None = None,
+    unit: str | None = None,
+    kategori_jabatan: str | None = None,
+    deskripsi: str | None = None,
+    urutan: int | None = None,
+) -> dict:
+    """Perbarui sebagian field Tugas Pokok.
+
+    Hanya field yang diisi (non-None) yang dikirim ke backend.
+
+    Args:
+        tp_id: UUID tugas pokok.
+        kode: Kode baru (opsional).
+        nama: Nama baru (opsional).
+        unit: Unit kerja baru (opsional).
+        kategori_jabatan: Kategori jabatan baru (opsional).
+        deskripsi: Deskripsi baru (opsional).
+        urutan: Urutan tampil baru (opsional).
+
+    Returns:
+        Data tugas pokok setelah diperbarui.
+    """
+    body: dict = {}
+    if kode is not None:
+        body["kode"] = kode
+    if nama is not None:
+        body["nama"] = nama
+    if unit is not None:
+        body["unit"] = unit
+    if kategori_jabatan is not None:
+        body["kategori_jabatan"] = kategori_jabatan
+    if deskripsi is not None:
+        body["deskripsi"] = deskripsi
+    if urutan is not None:
+        body["urutan"] = urutan
+    try:
+        return await backend_patch(
+            f"/api/v1/task-inventory/tugas-pokok/{tp_id}", ctx=ctx, body=body
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def hapus_tugas_pokok(ctx: Context, tp_id: str) -> dict:
+    """Hapus Tugas Pokok berdasarkan ID.
+
+    Args:
+        tp_id: UUID tugas pokok.
+
+    Returns:
+        Konfirmasi penghapusan.
+    """
+    try:
+        return await backend_delete(f"/api/v1/task-inventory/tugas-pokok/{tp_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+# ── DetilTugas ────────────────────────────────────────────────────────────────
+
+
+@mcp.tool
+async def daftar_detil_tugas(
+    ctx: Context,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Ambil daftar Detil Tugas (master katalog Task Inventory tingkat kedua).
+
+    Detil Tugas adalah rincian dari Tugas Pokok, satu tingkat lebih spesifik
+    sebelum dipecah lebih lanjut menjadi Uraian Tugas.
+
+    Args:
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict dengan keys ``items`` (list detil tugas) dan ``total`` (total record).
+    """
+    try:
+        return await backend_get(
+            "/api/v1/task-inventory/detil-tugas", ctx=ctx, limit=limit, offset=offset
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def buat_detil_tugas(
+    ctx: Context,
+    kode: str,
+    nama: str,
+    tugas_pokok_id: str,
+    deskripsi: str | None = None,
+    urutan: int = 0,
+) -> dict:
+    """Buat entri Detil Tugas baru pada katalog Task Inventory.
+
+    Args:
+        kode: Kode unik detil tugas (mis. ``DT-001``).
+        nama: Nama detil tugas.
+        tugas_pokok_id: UUID Tugas Pokok induk (dari ``daftar_tugas_pokok``).
+        deskripsi: Deskripsi singkat detil tugas (opsional).
+        urutan: Urutan tampil dalam katalog (default 0).
+
+    Returns:
+        Data detil tugas yang baru dibuat termasuk ``id`` (UUID).
+    """
+    body: dict = {
+        "kode": kode,
+        "nama": nama,
+        "tugas_pokok_id": tugas_pokok_id,
+        "urutan": urutan,
+    }
+    if deskripsi is not None:
+        body["deskripsi"] = deskripsi
+    try:
+        return await backend_post("/api/v1/task-inventory/detil-tugas", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def cari_detil_tugas(
+    ctx: Context,
+    domain: list | None = None,
+    order: list | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Cari Detil Tugas dengan domain bergaya Odoo.
+
+    Args:
+        domain: Kriteria pencarian, mis.
+            ``[["tugas_pokok_id", "=", "<uuid>"]]``.
+        order: Urutan hasil, mis. ``[["urutan", "asc"]]``.
+        limit: Jumlah item per halaman (default 20).
+        offset: Item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``items`` + ``total`` hasil pencarian.
+    """
+    body = {"domain": domain or [], "order": order or [], "limit": limit, "offset": offset}
+    try:
+        return await backend_post("/api/v1/task-inventory/detil-tugas/search", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def detail_detil_tugas(ctx: Context, dt_id: str) -> dict:
+    """Ambil satu Detil Tugas berdasarkan ID.
+
+    Args:
+        dt_id: UUID detil tugas.
+
+    Returns:
+        Data detil tugas.
+    """
+    try:
+        return await backend_get(f"/api/v1/task-inventory/detil-tugas/{dt_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def perbarui_detil_tugas(
+    ctx: Context,
+    dt_id: str,
+    kode: str | None = None,
+    nama: str | None = None,
+    tugas_pokok_id: str | None = None,
+    deskripsi: str | None = None,
+    urutan: int | None = None,
+) -> dict:
+    """Perbarui sebagian field Detil Tugas.
+
+    Hanya field yang diisi (non-None) yang dikirim ke backend.
+
+    Args:
+        dt_id: UUID detil tugas.
+        kode: Kode baru (opsional).
+        nama: Nama baru (opsional).
+        tugas_pokok_id: UUID Tugas Pokok induk baru (opsional).
+        deskripsi: Deskripsi baru (opsional).
+        urutan: Urutan tampil baru (opsional).
+
+    Returns:
+        Data detil tugas setelah diperbarui.
+    """
+    body: dict = {}
+    if kode is not None:
+        body["kode"] = kode
+    if nama is not None:
+        body["nama"] = nama
+    if tugas_pokok_id is not None:
+        body["tugas_pokok_id"] = tugas_pokok_id
+    if deskripsi is not None:
+        body["deskripsi"] = deskripsi
+    if urutan is not None:
+        body["urutan"] = urutan
+    try:
+        return await backend_patch(
+            f"/api/v1/task-inventory/detil-tugas/{dt_id}", ctx=ctx, body=body
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def hapus_detil_tugas(ctx: Context, dt_id: str) -> dict:
+    """Hapus Detil Tugas berdasarkan ID.
+
+    Args:
+        dt_id: UUID detil tugas.
+
+    Returns:
+        Konfirmasi penghapusan.
+    """
+    try:
+        return await backend_delete(f"/api/v1/task-inventory/detil-tugas/{dt_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+# ── UraianTugas ───────────────────────────────────────────────────────────────
+
+
+@mcp.tool
+async def daftar_uraian_tugas(
+    ctx: Context,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Ambil daftar Uraian Tugas (master katalog Task Inventory tingkat ketiga).
+
+    Uraian Tugas adalah unit tugas paling atomik dalam katalog Task Inventory —
+    inilah entri yang dipilih oleh anggota SME panel saat pengisian Tahap 1.
+
+    Args:
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict dengan keys ``items`` (list uraian tugas) dan ``total`` (total record).
+    """
+    try:
+        return await backend_get(
+            "/api/v1/task-inventory/uraian-tugas", ctx=ctx, limit=limit, offset=offset
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def buat_uraian_tugas(
+    ctx: Context,
+    kode: str,
+    nama: str,
+    detil_tugas_id: str,
+    deskripsi: str | None = None,
+    urutan: int = 0,
+) -> dict:
+    """Buat entri Uraian Tugas baru pada katalog Task Inventory.
+
+    Args:
+        kode: Kode unik uraian tugas (mis. ``UT-001``).
+        nama: Nama uraian tugas.
+        detil_tugas_id: UUID Detil Tugas induk (dari ``daftar_detil_tugas``).
+        deskripsi: Deskripsi singkat uraian tugas (opsional).
+        urutan: Urutan tampil dalam katalog (default 0).
+
+    Returns:
+        Data uraian tugas yang baru dibuat termasuk ``id`` (UUID).
+    """
+    body: dict = {
+        "kode": kode,
+        "nama": nama,
+        "detil_tugas_id": detil_tugas_id,
+        "urutan": urutan,
+    }
+    if deskripsi is not None:
+        body["deskripsi"] = deskripsi
+    try:
+        return await backend_post("/api/v1/task-inventory/uraian-tugas", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def cari_uraian_tugas(
+    ctx: Context,
+    domain: list | None = None,
+    order: list | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Cari Uraian Tugas dengan domain bergaya Odoo.
+
+    Args:
+        domain: Kriteria pencarian, mis.
+            ``[["detil_tugas_id", "=", "<uuid>"]]``.
+        order: Urutan hasil, mis. ``[["urutan", "asc"]]``.
+        limit: Jumlah item per halaman (default 20).
+        offset: Item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``items`` + ``total`` hasil pencarian.
+    """
+    body = {"domain": domain or [], "order": order or [], "limit": limit, "offset": offset}
+    try:
+        return await backend_post("/api/v1/task-inventory/uraian-tugas/search", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def detail_uraian_tugas(ctx: Context, ut_id: str) -> dict:
+    """Ambil satu Uraian Tugas berdasarkan ID.
+
+    Args:
+        ut_id: UUID uraian tugas.
+
+    Returns:
+        Data uraian tugas.
+    """
+    try:
+        return await backend_get(f"/api/v1/task-inventory/uraian-tugas/{ut_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def perbarui_uraian_tugas(
+    ctx: Context,
+    ut_id: str,
+    kode: str | None = None,
+    nama: str | None = None,
+    detil_tugas_id: str | None = None,
+    deskripsi: str | None = None,
+    urutan: int | None = None,
+) -> dict:
+    """Perbarui sebagian field Uraian Tugas.
+
+    Hanya field yang diisi (non-None) yang dikirim ke backend.
+
+    Args:
+        ut_id: UUID uraian tugas.
+        kode: Kode baru (opsional).
+        nama: Nama baru (opsional).
+        detil_tugas_id: UUID Detil Tugas induk baru (opsional).
+        deskripsi: Deskripsi baru (opsional).
+        urutan: Urutan tampil baru (opsional).
+
+    Returns:
+        Data uraian tugas setelah diperbarui.
+    """
+    body: dict = {}
+    if kode is not None:
+        body["kode"] = kode
+    if nama is not None:
+        body["nama"] = nama
+    if detil_tugas_id is not None:
+        body["detil_tugas_id"] = detil_tugas_id
+    if deskripsi is not None:
+        body["deskripsi"] = deskripsi
+    if urutan is not None:
+        body["urutan"] = urutan
+    try:
+        return await backend_patch(
+            f"/api/v1/task-inventory/uraian-tugas/{ut_id}", ctx=ctx, body=body
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def hapus_uraian_tugas(ctx: Context, ut_id: str) -> dict:
+    """Hapus Uraian Tugas berdasarkan ID.
+
+    Args:
+        ut_id: UUID uraian tugas.
+
+    Returns:
+        Konfirmasi penghapusan.
+    """
+    try:
+        return await backend_delete(f"/api/v1/task-inventory/uraian-tugas/{ut_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)

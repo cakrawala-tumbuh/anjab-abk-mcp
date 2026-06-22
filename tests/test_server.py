@@ -149,9 +149,28 @@ async def test_semua_endpoint_punya_tool():
         "wcp_submit_jawaban",
         "ts_buat_log",
         "info_saya",
+        # Katalog Task Inventory baru
+        "daftar_tugas_pokok",
+        "buat_tugas_pokok",
+        "cari_tugas_pokok",
+        "detail_tugas_pokok",
+        "perbarui_tugas_pokok",
+        "hapus_tugas_pokok",
+        "daftar_detil_tugas",
+        "buat_detil_tugas",
+        "cari_detil_tugas",
+        "detail_detil_tugas",
+        "perbarui_detil_tugas",
+        "hapus_detil_tugas",
+        "daftar_uraian_tugas",
+        "buat_uraian_tugas",
+        "cari_uraian_tugas",
+        "detail_uraian_tugas",
+        "perbarui_uraian_tugas",
+        "hapus_uraian_tugas",
     ]:
         assert nm in names, f"tool {nm} tidak terdaftar"
-    assert len(names) >= 120
+    assert len(names) >= 138
 
 
 @pytest.mark.asyncio
@@ -204,3 +223,119 @@ async def test_dcs_submit_jawaban():
                 {"responden_id": "r1", "jawaban": [{"item_id": "D1a", "skor_raw": 4}]},
             )
     assert m.await_args.kwargs["body"]["jawaban"][0]["item_id"] == "D1a"
+
+
+# ── Katalog Task Inventory (TugasPokok, DetilTugas, UraianTugas) ──────────────
+
+
+@pytest.mark.asyncio
+async def test_daftar_tugas_pokok():
+    payload = {"items": [{"id": "tp-1", "kode": "TP-001", "nama": "Mengajar"}], "total": 1}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload):
+        async with Client(mcp) as client:
+            result = await client.call_tool("daftar_tugas_pokok", {})
+    assert result.data["total"] == 1
+    assert result.data["items"][0]["kode"] == "TP-001"
+
+
+@pytest.mark.asyncio
+async def test_buat_tugas_pokok():
+    payload = {"id": "tp-baru", "kode": "TP-002", "nama": "Mengajar Matematika"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "buat_tugas_pokok",
+                {
+                    "kode": "TP-002",
+                    "nama": "Mengajar Matematika",
+                    "unit": "SMP",
+                    "kategori_jabatan": "guru",
+                },
+            )
+    assert result.data["id"] == "tp-baru"
+    assert m.await_args.kwargs["body"]["kode"] == "TP-002"
+
+
+@pytest.mark.asyncio
+async def test_hapus_tugas_pokok():
+    with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("hapus_tugas_pokok", {"tp_id": "tp-1"})
+    assert result.data["ok"] is True
+    assert "/api/v1/task-inventory/tugas-pokok/tp-1" in m.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_daftar_detil_tugas():
+    payload = {"items": [{"id": "dt-1", "kode": "DT-001", "nama": "Menyiapkan RPP"}], "total": 1}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload):
+        async with Client(mcp) as client:
+            result = await client.call_tool("daftar_detil_tugas", {})
+    assert result.data["items"][0]["kode"] == "DT-001"
+
+
+@pytest.mark.asyncio
+async def test_buat_detil_tugas():
+    payload = {"id": "dt-baru", "kode": "DT-002", "nama": "Menyiapkan Silabus"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "buat_detil_tugas",
+                {"kode": "DT-002", "nama": "Menyiapkan Silabus", "tugas_pokok_id": "tp-1"},
+            )
+    assert result.data["id"] == "dt-baru"
+    assert m.await_args.kwargs["body"]["tugas_pokok_id"] == "tp-1"
+
+
+@pytest.mark.asyncio
+async def test_perbarui_detil_tugas_hanya_field_terisi():
+    """Body PATCH hanya memuat field non-None."""
+    with patch(_PATCH, new_callable=AsyncMock, return_value={"id": "dt-1"}) as m:
+        async with Client(mcp) as client:
+            await client.call_tool("perbarui_detil_tugas", {"dt_id": "dt-1", "nama": "Baru"})
+    body = m.await_args.kwargs["body"]
+    assert body == {"nama": "Baru"}
+
+
+@pytest.mark.asyncio
+async def test_daftar_uraian_tugas():
+    payload = {"items": [{"id": "ut-1", "kode": "UT-001", "nama": "Menulis RPP"}], "total": 1}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload):
+        async with Client(mcp) as client:
+            result = await client.call_tool("daftar_uraian_tugas", {})
+    assert result.data["items"][0]["kode"] == "UT-001"
+
+
+@pytest.mark.asyncio
+async def test_buat_uraian_tugas():
+    payload = {"id": "ut-baru", "kode": "UT-002", "nama": "Menyusun KD"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "buat_uraian_tugas",
+                {"kode": "UT-002", "nama": "Menyusun KD", "detil_tugas_id": "dt-1"},
+            )
+    assert result.data["id"] == "ut-baru"
+    assert m.await_args.kwargs["body"]["detil_tugas_id"] == "dt-1"
+
+
+@pytest.mark.asyncio
+async def test_cari_uraian_tugas():
+    payload = {"items": [], "total": 0}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "cari_uraian_tugas",
+                {"domain": [["detil_tugas_id", "=", "dt-1"]]},
+            )
+    assert result.data["total"] == 0
+    assert m.await_args.kwargs["body"]["domain"] == [["detil_tugas_id", "=", "dt-1"]]
+
+
+@pytest.mark.asyncio
+async def test_hapus_uraian_tugas():
+    with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("hapus_uraian_tugas", {"ut_id": "ut-1"})
+    assert result.data["ok"] is True
+    assert "/api/v1/task-inventory/uraian-tugas/ut-1" in m.await_args.args[0]

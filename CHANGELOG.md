@@ -6,6 +6,24 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-22
+
+### Added
+
+- **Master data katalog Task Inventory** — 18 tool MCP baru untuk tiga model
+  hierarki katalog TI:
+  - **TugasPokok** (`daftar_tugas_pokok`, `buat_tugas_pokok`, `cari_tugas_pokok`,
+    `detail_tugas_pokok`, `perbarui_tugas_pokok`, `hapus_tugas_pokok`) —
+    endpoint `/api/v1/task-inventory/tugas-pokok`.
+  - **DetilTugas** (`daftar_detil_tugas`, `buat_detil_tugas`, `cari_detil_tugas`,
+    `detail_detil_tugas`, `perbarui_detil_tugas`, `hapus_detil_tugas`) —
+    endpoint `/api/v1/task-inventory/detil-tugas`.
+  - **UraianTugas** (`daftar_uraian_tugas`, `buat_uraian_tugas`, `cari_uraian_tugas`,
+    `detail_uraian_tugas`, `perbarui_uraian_tugas`, `hapus_uraian_tugas`) —
+    endpoint `/api/v1/task-inventory/uraian-tugas`.
+- Semua tool baru mendukung pola CRUD lengkap: list (GET), create (POST),
+  search (POST /search), get (GET /{id}), update (PATCH /{id}), delete (DELETE /{id}).
+
 ## [0.3.0] - 2026-06-22
 
 ### Added
