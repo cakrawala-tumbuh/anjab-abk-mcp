@@ -6,6 +6,24 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-22
+
+### Added
+
+- **Login M2M headless** (`m2m.py`): pada mode stdio (tanpa OAuth user), MCP
+  melakukan Authorization Code + PKCE sendiri ke Authentik via *flow executor API*
+  memakai kredensial service user (`BACKEND_M2M_*`), lalu memakai access_token
+  sebagai Bearer ke backend. Token di-cache & auto-refresh; tanpa browser, tanpa
+  perubahan di sisi Authentik.
+- Config baru: `BACKEND_M2M_AUTHENTIK_URL`, `BACKEND_M2M_CLIENT_ID`,
+  `BACKEND_M2M_REDIRECT_URI`, `BACKEND_M2M_USERNAME`, `BACKEND_M2M_PASSWORD`,
+  `BACKEND_M2M_SCOPE`, `BACKEND_M2M_FLOW_SLUG`.
+
+### Changed
+
+- `client.py`: urutan resolusi Bearer kini token user OAuth → token M2M → 
+  `BACKEND_API_TOKEN`. Pada 401, token M2M di-refresh otomatis lalu request diulang.
+
 ## [0.2.0] - 2026-06-22
 
 ### Added

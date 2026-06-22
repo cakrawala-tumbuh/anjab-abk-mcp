@@ -19,6 +19,8 @@ import httpx
 
 from .auth_provider import get_upstream_token
 from .config import settings
+from .m2m import M2MError, get_m2m_access_token, m2m_configured
+from .m2m import invalidate as invalidate_m2m
 
 logger = logging.getLogger(__name__)
 
@@ -52,19 +54,8 @@ def _sub_from_jwt(token: str) -> str | None:
         return None
 
 
-def get_bearer_from_ctx(ctx: object | None) -> str | None:
-    """Ambil Bearer token Authentik dari konteks FastMCP atau fallback ke config.
-
-    Urutan prioritas:
-    1. Token upstream Authentik dari cache (keyed by sub dari FastMCP JWT).
-    2. ``BACKEND_API_TOKEN`` dari config (service account / stdio mode).
-
-    Args:
-        ctx: FastMCP ``Context`` dari tool call (bisa None di stdio tanpa auth).
-
-    Returns:
-        Bearer token string, atau None bila tidak ada token yang tersedia.
-    """
+def _user_token_from_ctx(ctx: object | None) -> str | None:
+    """Ambil token user Authentik dari konteks FastMCP (alur OAuth Pola B)."""
     if ctx is not None:
         auth = getattr(ctx, "auth", None)
         if auth is not None:
@@ -75,7 +66,41 @@ def get_bearer_from_ctx(ctx: object | None) -> str | None:
                     upstream = get_upstream_token(sub)
                     if upstream:
                         return upstream
+    return None
+
+
+async def resolve_bearer(ctx: object | None) -> str | None:
+    """Tentukan Bearer token untuk request ke backend.
+
+    Urutan prioritas:
+    1. Token user Authentik dari konteks OAuth (Claude Web / Pola B).
+    2. Token M2M headless (mode stdio): MCP login sendiri ke Authentik bila
+       ``backend_m2m_*`` dikonfigurasi.
+    3. ``BACKEND_API_TOKEN`` statis dari config.
+
+    Args:
+        ctx: FastMCP ``Context`` dari tool call (bisa None di stdio tanpa auth).
+
+    Returns:
+        Bearer token string, atau None bila tidak ada yang tersedia.
+    """
+    user_token = _user_token_from_ctx(ctx)
+    if user_token:
+        return user_token
+    if m2m_configured():
+        try:
+            return await get_m2m_access_token()
+        except M2MError as exc:
+            logger.warning("Login M2M gagal, fallback ke BACKEND_API_TOKEN: %s", exc)
     return settings.backend_api_token
+
+
+def get_bearer_from_ctx(ctx: object | None) -> str | None:
+    """Versi sinkron: token user OAuth atau ``BACKEND_API_TOKEN`` (tanpa M2M).
+
+    Dipertahankan untuk kompatibilitas; alur utama memakai ``resolve_bearer``.
+    """
+    return _user_token_from_ctx(ctx) or settings.backend_api_token
 
 
 async def backend_request(
@@ -100,19 +125,32 @@ async def backend_request(
     Raises:
         BackendError: Bila backend mengembalikan error atau tidak dapat dijangkau.
     """
-    headers: dict[str, str] = {}
-    token = get_bearer_from_ctx(ctx)
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    else:
+    url = f"{settings.backend_base_url.rstrip('/')}{path}"
+    token = await resolve_bearer(ctx)
+    if not token:
         logger.warning("Tidak ada Bearer token — request ke backend tanpa auth")
 
-    url = f"{settings.backend_base_url.rstrip('/')}{path}"
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.request(method, url, headers=headers, **kwargs)
-    except httpx.RequestError as exc:
-        raise BackendError(f"Gagal menghubungi backend: {exc}") from exc
+    async def _send(bearer: str | None) -> httpx.Response:
+        headers: dict[str, str] = {}
+        if bearer:
+            headers["Authorization"] = f"Bearer {bearer}"
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                return await client.request(method, url, headers=headers, **kwargs)
+        except httpx.RequestError as exc:
+            raise BackendError(f"Gagal menghubungi backend: {exc}") from exc
+
+    response = await _send(token)
+
+    # Bila token M2M kedaluwarsa/dicabut, backend balas 401 — refresh sekali lalu ulang.
+    if response.status_code == 401 and m2m_configured() and _user_token_from_ctx(ctx) is None:
+        invalidate_m2m()
+        try:
+            token = await get_m2m_access_token()
+        except M2MError as exc:
+            logger.warning("Refresh token M2M gagal: %s", exc)
+        else:
+            response = await _send(token)
 
     if not response.is_success:
         try:

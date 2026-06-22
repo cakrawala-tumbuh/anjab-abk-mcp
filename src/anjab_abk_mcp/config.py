@@ -65,6 +65,19 @@ class Settings(BaseSettings):
     # API key (untuk VS Code / CLI / tools non-OAuth)
     mcp_api_key: str | None = None
 
+    # M2M headless login (mode stdio / tanpa OAuth user).
+    # MCP login sendiri ke Authentik via Authorization Code + PKCE (flow executor API)
+    # memakai kredensial service user, lalu memakai access_token sebagai Bearer ke
+    # backend. Aktif bila ``backend_m2m_username`` dan ``backend_m2m_password`` diisi.
+    # Lebih diutamakan daripada ``backend_api_token`` statis.
+    backend_m2m_username: str | None = None
+    backend_m2m_password: str | None = None
+    backend_m2m_authentik_url: str | None = None  # mis. https://sajati.cantum.co.id
+    backend_m2m_client_id: str | None = None  # client_id provider, mis. anjab-abk-web
+    backend_m2m_redirect_uri: str | None = None  # redirect_uri terdaftar di provider
+    backend_m2m_scope: str = "openid profile email"
+    backend_m2m_flow_slug: str = "default-authentication-flow"
+
     @classmethod
     def settings_customise_sources(
         cls,
