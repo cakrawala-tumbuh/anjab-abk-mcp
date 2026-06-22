@@ -345,6 +345,10 @@ async def tambah_anggota_sme_panel(
 ) -> dict:
     """Tambahkan partisipan sebagai anggota SME Panel.
 
+    Partisipan dapat ditambahkan ke panel mana pun tanpa harus memiliki jabatan
+    yang cocok dengan panel tersebut. Satu-satunya batasan adalah partisipan
+    belum menjadi anggota panel yang sama.
+
     Args:
         panel_id: UUID SME Panel.
         partisipan_id: UUID partisipan yang akan ditambahkan.
@@ -376,8 +380,9 @@ async def daftar_ti_sesi(
     """Ambil daftar sesi Task Inventory (TI) yang ada dalam sistem.
 
     Sesi TI memiliki alur 3 tahap: DRAFT → TAHAP1 → TAHAP2 → TAHAP3 →
-    CLOSED → ANALYZED. Setiap sesi mencakup unit kerja, kategori jabatan, dan
-    periode studi.
+    CLOSED → ANALYZED. Setiap sesi mencakup kategori jabatan dan periode studi.
+    Field ``unit`` bersifat opsional — sesi lintas-unit tidak memiliki unit kerja
+    spesifik.
 
     Args:
         limit: Jumlah item per halaman (maks 100, default 20).
@@ -411,29 +416,38 @@ async def detail_ti_sesi(ctx: Context, sesi_id: str) -> dict:
 @mcp.tool
 async def buat_ti_sesi(
     ctx: Context,
-    unit: str,
     kategori_jabatan: str,
     periode: str,
+    unit: str | None = None,
     koordinator_id: str | None = None,
+    jabatan_id: str | None = None,
     catatan: str | None = None,
 ) -> dict:
     """Buat sesi Task Inventory baru (status awal: DRAFT).
 
     Args:
-        unit: Nama unit kerja / satuan pendidikan yang dianalisis.
         kategori_jabatan: Kategori jabatan yang dianalisis (mis. ``guru``,
             ``staf TU``, ``kepala sekolah``).
         periode: Periode studi dalam format string, mis. ``2025/2026``.
+        unit: Nama unit kerja / satuan pendidikan yang dianalisis. Opsional —
+            bila tidak diisi, sesi berlaku lintas-unit (cross-unit session).
         koordinator_id: UUID partisipan yang menjadi koordinator SME panel
             (reviewer Tahap 2). Opsional saat buat, wajib saat mulai Tahap 2.
+        jabatan_id: UUID jabatan yang dikaitkan dengan sesi ini (opsional).
+            Bila diisi, hanya partisipan yang merupakan anggota SME panel untuk
+            jabatan tersebut yang dapat ditambahkan sebagai responden.
         catatan: Catatan tambahan untuk sesi ini (opsional).
 
     Returns:
         Data sesi TI yang baru dibuat termasuk ``id`` (UUID).
     """
-    body: dict = {"unit": unit, "kategori_jabatan": kategori_jabatan, "periode": periode}
+    body: dict = {"kategori_jabatan": kategori_jabatan, "periode": periode}
+    if unit is not None:
+        body["unit"] = unit
     if koordinator_id is not None:
         body["koordinator_id"] = koordinator_id
+    if jabatan_id is not None:
+        body["jabatan_id"] = jabatan_id
     if catatan is not None:
         body["catatan"] = catatan
     try:
@@ -452,6 +466,11 @@ async def ti_tambah_responden(
     """Tambahkan responden (anggota SME panel) ke sesi Task Inventory.
 
     Minimal satu dari ``partisipan_id`` atau ``nama`` harus diisi.
+
+    Catatan: bila sesi memiliki ``jabatan_id`` dan ``partisipan_id`` diisi,
+    partisipan tersebut wajib menjadi anggota SME panel untuk jabatan yang
+    dikaitkan ke sesi. Backend akan menolak permintaan bila syarat ini tidak
+    terpenuhi.
 
     Args:
         sesi_id: UUID sesi TI.
