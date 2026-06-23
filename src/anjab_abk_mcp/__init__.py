@@ -4,4 +4,4 @@ SUMBER TUNGGAL versi project. `pyproject.toml` membaca nilai ini secara dinamis
 (`[tool.hatch.version]`), jadi cukup ubah di sini saat menaikkan versi.
 """
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

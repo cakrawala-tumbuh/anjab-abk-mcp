@@ -6,6 +6,16 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-23
+
+### Changed
+
+- **`ti_catalog`**: docstring diperkaya untuk menjelaskan hirarki tiga tingkat
+  (Tugas Pokok → Detil Tugas → Uraian Tugas) yang menopang seleksi relevansi Tahap 1
+  bertingkat. Tiap item katalog kini menyertakan `tugas_pokok_id` dan `detil_tugas_id`
+  (kunci stabil) di samping nama-nama yang sudah ada — diteruskan apa adanya dari
+  backend `TiCatalogRead`.
+
 ## [0.7.0] - 2026-06-23
 
 ### Changed (Breaking)

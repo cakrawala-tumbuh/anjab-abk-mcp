@@ -2151,13 +2151,22 @@ async def ti_catalog(
 ) -> dict:
     """Ambil katalog task inventory (master task) dengan filter opsional.
 
+    Tiap item katalog membawa hirarki tiga tingkat untuk seleksi relevansi Tahap 1
+    yang bertingkat (cascade): Tugas Pokok (``tugas_pokok_id``/``tugas_pokok``) →
+    Detil Tugas (``detil_tugas_id``/``detil_tugas``, bisa null bila task langsung di
+    bawah tugas pokok) → Uraian Tugas (``kode``/``uraian_tugas``). Gunakan
+    ``tugas_pokok_id`` lalu ``detil_tugas_id`` sebagai kunci stabil saat mempersempit
+    pilihan dari level ke level; ``kode`` uraian tugas terpilih dipakai untuk
+    ``ti_submit_seleksi``.
+
     Args:
         jabatan_id: Filter ID jabatan (opsional). Gunakan ``ti_catalog_kombinasi``
             untuk melihat jabatan_id yang tersedia.
         unit: Filter unit kerja (opsional).
 
     Returns:
-        Daftar task katalog sesuai filter.
+        Daftar task katalog sesuai filter, lengkap dengan id & nama tugas pokok,
+        detil tugas, serta uraian tugas.
     """
     params: dict = {}
     if jabatan_id is not None:
