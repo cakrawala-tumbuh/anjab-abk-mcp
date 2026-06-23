@@ -241,15 +241,15 @@ async def test_daftar_tugas_pokok():
 
 @pytest.mark.asyncio
 async def test_buat_tugas_pokok():
-    payload = {"id": "tp-baru", "jabatan_id": "jbt_1", "nama": "Mengajar Matematika"}
+    payload = {"id": "tp-baru", "jabatan_ids": ["jbt_1"], "nama": "Mengajar Matematika"}
     with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "buat_tugas_pokok",
-                {"jabatan_id": "jbt_1", "nama": "Mengajar Matematika"},
+                {"jabatan_ids": ["jbt_1"], "nama": "Mengajar Matematika"},
             )
     assert result.data["id"] == "tp-baru"
-    assert m.await_args.kwargs["body"]["jabatan_id"] == "jbt_1"
+    assert m.await_args.kwargs["body"]["jabatan_ids"] == ["jbt_1"]
 
 
 @pytest.mark.asyncio
@@ -272,15 +272,16 @@ async def test_daftar_detil_tugas():
 
 @pytest.mark.asyncio
 async def test_buat_detil_tugas():
-    payload = {"id": "dt-baru", "kode": "DT-002", "nama": "Menyiapkan Silabus"}
+    payload = {"id": "dt-baru", "nama": "Menyiapkan Silabus", "jabatan_ids": ["jbt_1"]}
     with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "buat_detil_tugas",
-                {"kode": "DT-002", "nama": "Menyiapkan Silabus", "tugas_pokok_id": "tp-1"},
+                {"nama": "Menyiapkan Silabus", "tugas_pokok_id": "tp-1", "jabatan_ids": ["jbt_1"]},
             )
     assert result.data["id"] == "dt-baru"
     assert m.await_args.kwargs["body"]["tugas_pokok_id"] == "tp-1"
+    assert m.await_args.kwargs["body"]["jabatan_ids"] == ["jbt_1"]
 
 
 @pytest.mark.asyncio
@@ -315,11 +316,13 @@ async def test_buat_uraian_tugas():
                     "unit": "SMP",
                     "urutan": 1,
                     "tugas_pokok_id": "tp-1",
+                    "jabatan_id": "jbt_1",
                     "detil_tugas_id": "dt-1",
                 },
             )
     assert result.data["id"] == "ut-baru"
     assert m.await_args.kwargs["body"]["tugas_pokok_id"] == "tp-1"
+    assert m.await_args.kwargs["body"]["jabatan_id"] == "jbt_1"
 
 
 @pytest.mark.asyncio

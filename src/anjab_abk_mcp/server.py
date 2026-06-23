@@ -3069,23 +3069,24 @@ async def daftar_tugas_pokok(
 @mcp.tool
 async def buat_tugas_pokok(
     ctx: Context,
-    jabatan_id: str,
+    jabatan_ids: list[str],
     nama: str,
 ) -> dict:
     """Buat entri Tugas Pokok baru pada katalog Task Inventory.
 
-    TugasPokok melekat pada satu Jabatan; jabatan akan diwariskan ke semua
-    DetilTugas dan UraianTugas di bawahnya.
+    TugasPokok dapat terkait dengan satu atau lebih Jabatan (M2M).
+    DetilTugas di bawahnya hanya boleh memilih subset dari jabatan_ids TP ini.
 
     Args:
-        jabatan_id: ID jabatan induk. Gunakan ``daftar_jabatan`` untuk
-            mendapatkan ID yang valid.
-        nama: Nama klaster tugas (mis. ``Pengelolaan SDM``).
+        jabatan_ids: Daftar ID jabatan yang terkait (minimal satu). Gunakan
+            ``daftar_jabatan`` untuk mendapatkan ID yang valid.
+        nama: Nama klaster tugas (mis. ``Pengelolaan SDM``). Bersifat unik
+            secara global — dua TP tidak boleh punya nama sama.
 
     Returns:
         Data tugas pokok yang baru dibuat termasuk ``id``.
     """
-    body: dict = {"jabatan_id": jabatan_id, "nama": nama}
+    body: dict = {"jabatan_ids": jabatan_ids, "nama": nama}
     try:
         return await backend_post("/api/v1/task-inventory/tugas-pokok", ctx=ctx, body=body)
     except BackendError as exc:
@@ -3139,7 +3140,7 @@ async def detail_tugas_pokok(ctx: Context, tp_id: str) -> dict:
 async def perbarui_tugas_pokok(
     ctx: Context,
     tp_id: str,
-    jabatan_id: str | None = None,
+    jabatan_ids: list[str] | None = None,
     nama: str | None = None,
 ) -> dict:
     """Perbarui sebagian field Tugas Pokok.
@@ -3148,15 +3149,16 @@ async def perbarui_tugas_pokok(
 
     Args:
         tp_id: UUID tugas pokok.
-        jabatan_id: ID jabatan induk baru (opsional).
+        jabatan_ids: Daftar ID jabatan baru (minimal satu, menggantikan
+            seluruh daftar lama; opsional).
         nama: Nama klaster tugas baru (opsional).
 
     Returns:
         Data tugas pokok setelah diperbarui.
     """
     body: dict = {}
-    if jabatan_id is not None:
-        body["jabatan_id"] = jabatan_id
+    if jabatan_ids is not None:
+        body["jabatan_ids"] = jabatan_ids
     if nama is not None:
         body["nama"] = nama
     try:
@@ -3215,32 +3217,29 @@ async def daftar_detil_tugas(
 @mcp.tool
 async def buat_detil_tugas(
     ctx: Context,
-    kode: str,
     nama: str,
     tugas_pokok_id: str,
-    deskripsi: str | None = None,
-    urutan: int = 0,
+    jabatan_ids: list[str],
 ) -> dict:
     """Buat entri Detil Tugas baru pada katalog Task Inventory.
 
+    DetilTugas terkait M2M dengan Jabatan; jabatan yang dipilih harus
+    merupakan subset dari jabatan_ids TugasPokok induknya.
+
     Args:
-        kode: Kode unik detil tugas (mis. ``DT-001``).
         nama: Nama detil tugas.
         tugas_pokok_id: UUID Tugas Pokok induk (dari ``daftar_tugas_pokok``).
-        deskripsi: Deskripsi singkat detil tugas (opsional).
-        urutan: Urutan tampil dalam katalog (default 0).
+        jabatan_ids: Daftar ID jabatan yang terkait (minimal satu). Setiap
+            ID harus ada di dalam ``jabatan_ids`` TugasPokok induk.
 
     Returns:
         Data detil tugas yang baru dibuat termasuk ``id`` (UUID).
     """
     body: dict = {
-        "kode": kode,
         "nama": nama,
         "tugas_pokok_id": tugas_pokok_id,
-        "urutan": urutan,
+        "jabatan_ids": jabatan_ids,
     }
-    if deskripsi is not None:
-        body["deskripsi"] = deskripsi
     try:
         return await backend_post("/api/v1/task-inventory/detil-tugas", ctx=ctx, body=body)
     except BackendError as exc:
@@ -3294,11 +3293,9 @@ async def detail_detil_tugas(ctx: Context, dt_id: str) -> dict:
 async def perbarui_detil_tugas(
     ctx: Context,
     dt_id: str,
-    kode: str | None = None,
     nama: str | None = None,
     tugas_pokok_id: str | None = None,
-    deskripsi: str | None = None,
-    urutan: int | None = None,
+    jabatan_ids: list[str] | None = None,
 ) -> dict:
     """Perbarui sebagian field Detil Tugas.
 
@@ -3306,26 +3303,21 @@ async def perbarui_detil_tugas(
 
     Args:
         dt_id: UUID detil tugas.
-        kode: Kode baru (opsional).
         nama: Nama baru (opsional).
         tugas_pokok_id: UUID Tugas Pokok induk baru (opsional).
-        deskripsi: Deskripsi baru (opsional).
-        urutan: Urutan tampil baru (opsional).
+        jabatan_ids: Daftar ID jabatan baru (menggantikan seluruh daftar lama;
+            setiap ID harus ada di ``jabatan_ids`` TugasPokok induk; opsional).
 
     Returns:
         Data detil tugas setelah diperbarui.
     """
     body: dict = {}
-    if kode is not None:
-        body["kode"] = kode
     if nama is not None:
         body["nama"] = nama
     if tugas_pokok_id is not None:
         body["tugas_pokok_id"] = tugas_pokok_id
-    if deskripsi is not None:
-        body["deskripsi"] = deskripsi
-    if urutan is not None:
-        body["urutan"] = urutan
+    if jabatan_ids is not None:
+        body["jabatan_ids"] = jabatan_ids
     try:
         return await backend_patch(
             f"/api/v1/task-inventory/detil-tugas/{dt_id}", ctx=ctx, body=body
@@ -3387,11 +3379,13 @@ async def buat_uraian_tugas(
     unit: str,
     urutan: int,
     tugas_pokok_id: str,
+    jabatan_id: str,
     detil_tugas_id: str | None = None,
 ) -> dict:
     """Buat entri Uraian Tugas baru pada katalog Task Inventory.
 
-    Jabatan uraian tugas diwarisi secara otomatis dari TugasPokok induk.
+    Jabatan uraian tugas harus disertakan secara eksplisit dan harus merupakan
+    salah satu dari jabatan_ids DetilTugas induknya (jika detil_tugas_id diisi).
 
     Args:
         kode: Kode deterministik unik (mis. ``TIf0b59714``).
@@ -3399,7 +3393,9 @@ async def buat_uraian_tugas(
             ``Menyusun evaluasi karyawan``.
         unit: Unit/jenjang (TK, SD, SMP, SMA, SMK, dll.).
         urutan: Urutan tampil dalam kombinasi unit × jabatan (mulai 1).
-        tugas_pokok_id: ID TugasPokok induk. Jabatan diwarisi dari sini.
+        tugas_pokok_id: ID TugasPokok induk.
+        jabatan_id: ID Jabatan yang terkait (M2O). Jika ``detil_tugas_id``
+            diisi, jabatan ini harus ada di dalam ``jabatan_ids`` DetilTugas.
         detil_tugas_id: ID DetilTugas induk (opsional).
 
     Returns:
@@ -3411,6 +3407,7 @@ async def buat_uraian_tugas(
         "unit": unit,
         "urutan": urutan,
         "tugas_pokok_id": tugas_pokok_id,
+        "jabatan_id": jabatan_id,
     }
     if detil_tugas_id is not None:
         body["detil_tugas_id"] = detil_tugas_id
@@ -3473,6 +3470,7 @@ async def perbarui_uraian_tugas(
     urutan: int | None = None,
     tugas_pokok_id: str | None = None,
     detil_tugas_id: str | None = None,
+    jabatan_id: str | None = None,
 ) -> dict:
     """Perbarui sebagian field Uraian Tugas.
 
@@ -3486,6 +3484,8 @@ async def perbarui_uraian_tugas(
         urutan: Urutan tampil baru (opsional).
         tugas_pokok_id: ID TugasPokok induk baru (opsional).
         detil_tugas_id: ID DetilTugas induk baru (opsional).
+        jabatan_id: ID Jabatan baru (opsional). Harus ada di dalam
+            ``jabatan_ids`` DetilTugas terkait.
 
     Returns:
         Data uraian tugas setelah diperbarui.
@@ -3503,6 +3503,8 @@ async def perbarui_uraian_tugas(
         body["tugas_pokok_id"] = tugas_pokok_id
     if detil_tugas_id is not None:
         body["detil_tugas_id"] = detil_tugas_id
+    if jabatan_id is not None:
+        body["jabatan_id"] = jabatan_id
     try:
         return await backend_patch(
             f"/api/v1/task-inventory/uraian-tugas/{ut_id}", ctx=ctx, body=body

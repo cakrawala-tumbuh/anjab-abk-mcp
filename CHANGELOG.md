@@ -6,6 +6,19 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-23
+
+### Changed (Breaking)
+
+- **`buat_tugas_pokok`**: parameter `jabatan_id` (str tunggal) diganti `jabatan_ids`
+  (list[str], minimal satu) — satu TugasPokok kini dapat terhubung ke beberapa Jabatan.
+- **`buat_detil_tugas`**: parameter `jabatan_ids` (list[str], minimal satu) ditambahkan;
+  nilai harus subset dari `jabatan_ids` TugasPokok terpilih.
+- **`buat_uraian_tugas`**: parameter `jabatan_id` kini wajib eksplisit (str, harus ada
+  dalam `jabatan_ids` DetilTugas terpilih); sebelumnya diwarisi otomatis dari TugasPokok.
+- **`perbarui_tugas_pokok`**: mendukung `jabatan_ids` (list[str]) menggantikan `jabatan_id`.
+- **`perbarui_detil_tugas`**: mendukung `jabatan_ids` (list[str]).
+
 ## [0.6.0] - 2026-06-22
 
 ### Changed (Breaking)
