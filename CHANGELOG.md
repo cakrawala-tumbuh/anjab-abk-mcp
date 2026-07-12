@@ -6,6 +6,18 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-07-12
+
+### Fixed
+
+- **Release workflow gagal sejak 2026-06-23** — `release.yml` memanggil
+  reusable workflow di org `cakrawala-tumbuh/github-release` dan
+  `cakrawala-tumbuh/release-docker-image-ghcr`, padahal kedua repo itu ada
+  di `andhit-r/github-release` dan `andhit-r/release-docker-image-ghcr`
+  (sama seperti `anjab-abk-backend` & `anjab-abk-web-app` yang releasenya
+  sukses). GitHub menolak run tanpa menjalankan job sama sekali ("workflow
+  file issue") karena tidak bisa me-resolve reusable workflow-nya.
+
 ## [0.10.0] - 2026-07-12
 
 ### Fixed
