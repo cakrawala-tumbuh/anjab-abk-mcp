@@ -6,6 +6,42 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-12
+
+### Fixed
+
+- **Bug 204/304 di `backend_request`** (`client.py`) — body kosong (`204 No
+  Content`, `304 Not Modified`) tak lagi diparse sebagai JSON (dulu meledak
+  `Expecting value: line 1 column 1 (char 0)` walau operasi backend sebenarnya
+  berhasil, mis. 18 dari 19 tool `hapus_*`). Kegagalan parse JSON pada body
+  non-kosong kini terbungkus `BackendError` (bukan `JSONDecodeError` mentah).
+  `304` sengaja ditangani terpisah dari cek `response.is_success` — httpx
+  menganggap `304` BUKAN sukses (di luar rentang 2xx) walau bukan error.
+- **19 tool salah anotasi return `-> dict`** padahal endpoint backend membalas
+  JSON array, memicu `structured_content must be a dict or None. Got list`.
+  Diubah ke `-> list` (atau `-> dict | list` untuk tool yang dua langkah).
+  Termasuk perbaikan tersembunyi: `dcs_submit_jawaban`, `wcp_submit_jawaban`,
+  `ti_submit_detail` ternyata memanggil endpoint bulk-POST yang sudah dihapus
+  backend (revisi draft-save/submit v0.25.0) — sekarang memanggil `PUT` (draft)
+  lalu `POST .../submit` sesuai kontrak baru.
+
+### Added
+
+- **`paksa=True` pada `hapus_ti_sesi`/`hapus_dcs_sesi`/`hapus_wcp_sesi`/
+  `hapus_opm_sesi`** — admin dapat menghapus sesi non-DRAFT beserta SELURUH
+  responden & jawabannya (permanen), mengikuti backend `?paksa=true`.
+- `backend_put` di `client.py` — helper PUT (draft-save parsial), belum ada
+  sebelumnya walau backend sudah punya endpoint `PUT .../jawaban` & `.../detail`
+  sejak v0.25.0.
+
+### Changed
+
+- `requirements-test.txt`: `respx` 0.21.1 → 0.23.1 — versi lama tidak
+  kompatibel dengan `httpx` 0.28.1 yang sudah dipin (route respx tak pernah
+  match, gagal senyap sebagai `AllMockedAssertionError`). Baru ketahuan
+  sekarang karena `respx` sebelumnya tidak pernah benar-benar dipakai
+  (`test_server.py` mem-mock `backend_*` langsung, melewati layer httpx).
+
 ## [0.9.0] - 2026-07-12
 
 ### Added

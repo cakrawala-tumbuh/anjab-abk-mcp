@@ -31,6 +31,7 @@ from .client import (
     backend_get,
     backend_patch,
     backend_post,
+    backend_put,
 )
 from .config import settings
 
@@ -560,7 +561,7 @@ async def ti_mulai_tahap3(ctx: Context, sesi_id: str, paksa: bool = False) -> di
 
 
 @mcp.tool
-async def ti_task_terpilih(ctx: Context, sesi_id: str) -> dict:
+async def ti_task_terpilih(ctx: Context, sesi_id: str) -> list:
     """Ambil daftar task yang terpilih (final) untuk sesi TI.
 
     Task final = unanimous (semua anggota pilih) ∪ disetujui koordinator Tahap 2.
@@ -1805,26 +1806,32 @@ async def perbarui_ti_sesi(
 
 
 @mcp.tool
-async def hapus_ti_sesi(ctx: Context, sesi_id: str) -> dict:
+async def hapus_ti_sesi(ctx: Context, sesi_id: str, paksa: bool = False) -> dict:
     """Hapus sesi Task Inventory berdasarkan ID.
 
     **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
-    bukan admin).
+    bukan admin). Sesi berstatus DRAFT dapat dihapus langsung; sesi di status lain
+    ditolak (422) kecuali ``paksa=True``.
 
     Args:
         sesi_id: UUID sesi TI.
+        paksa: Bila True, hapus sesi non-DRAFT beserta SELURUH responden, seleksi,
+            detail, dan keputusan Tahap 2 miliknya — **permanen, tidak dapat
+            dibatalkan**. Gunakan dengan hati-hati.
 
     Returns:
         Konfirmasi penghapusan.
     """
     try:
-        return await backend_delete(f"/api/v1/task-inventory/sesi/{sesi_id}", ctx=ctx)
+        return await backend_delete(
+            f"/api/v1/task-inventory/sesi/{sesi_id}", ctx=ctx, params={"paksa": paksa}
+        )
     except BackendError as exc:
         _raise_tool_error(exc)
 
 
 @mcp.tool
-async def ti_daftar_responden(ctx: Context, sesi_id: str) -> dict:
+async def ti_daftar_responden(ctx: Context, sesi_id: str) -> list:
     """Ambil daftar responden pada sebuah sesi Task Inventory.
 
     Args:
@@ -1957,7 +1964,7 @@ async def ti_submit_tahap2(ctx: Context, sesi_id: str, keputusan: list[dict]) ->
 
 
 @mcp.tool
-async def ti_daftar_detail(ctx: Context, responden_id: str) -> dict:
+async def ti_daftar_detail(ctx: Context, responden_id: str) -> list:
     """Ambil detail CalHR (Tahap 3) yang sudah diisi responden.
 
     Args:
@@ -1975,8 +1982,12 @@ async def ti_daftar_detail(ctx: Context, responden_id: str) -> dict:
 
 
 @mcp.tool
-async def ti_submit_detail(ctx: Context, responden_id: str, detail: list[dict]) -> dict:
+async def ti_submit_detail(ctx: Context, responden_id: str, detail: list[dict]) -> dict | list:
     """Submit detail CalHR Tahap 3 per task untuk seorang responden.
+
+    Menyimpan seluruh detail sebagai draft (``PUT .../detail``) lalu langsung
+    memfinalisasi (``POST .../detail/submit``) — dua langkah backend dalam satu
+    panggilan tool.
 
     Args:
         responden_id: UUID responden.
@@ -1988,20 +1999,24 @@ async def ti_submit_detail(ctx: Context, responden_id: str, detail: list[dict]) 
             ``peak4w_hours``, ``dcs_flag``, ``catatan``.
 
     Returns:
-        Konfirmasi penyimpanan detail.
+        Daftar detail tersimpan setelah finalisasi.
     """
     try:
-        return await backend_post(
+        await backend_put(
             f"/api/v1/task-inventory/sesi/responden/{responden_id}/detail",
             ctx=ctx,
             body={"detail": detail},
+        )
+        return await backend_post(
+            f"/api/v1/task-inventory/sesi/responden/{responden_id}/detail/submit",
+            ctx=ctx,
         )
     except BackendError as exc:
         _raise_tool_error(exc)
 
 
 @mcp.tool
-async def ti_kuesioner_saya(ctx: Context) -> dict:
+async def ti_kuesioner_saya(ctx: Context) -> list:
     """Ambil daftar kuesioner Task Inventory yang di-assign ke saya (responden).
 
     Returns:
@@ -2018,7 +2033,7 @@ async def ti_catalog(
     ctx: Context,
     jabatan_id: str | None = None,
     unit: str | None = None,
-) -> dict:
+) -> list:
     """Ambil katalog task inventory (master task) dengan filter opsional.
 
     Tiap item katalog membawa hirarki tiga tingkat untuk seleksi relevansi Tahap 1
@@ -2050,7 +2065,7 @@ async def ti_catalog(
 
 
 @mcp.tool
-async def ti_catalog_kombinasi(ctx: Context) -> dict:
+async def ti_catalog_kombinasi(ctx: Context) -> list:
     """Ambil daftar kombinasi unit × jabatan_id yang tersedia di katalog.
 
     Returns:
@@ -2147,26 +2162,30 @@ async def perbarui_dcs_sesi(
 
 
 @mcp.tool
-async def hapus_dcs_sesi(ctx: Context, sesi_id: str) -> dict:
+async def hapus_dcs_sesi(ctx: Context, sesi_id: str, paksa: bool = False) -> dict:
     """Hapus sesi DCS berdasarkan ID.
 
     **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
-    bukan admin).
+    bukan admin). Sesi berstatus DRAFT dapat dihapus langsung; sesi di status lain
+    ditolak (422) kecuali ``paksa=True``.
 
     Args:
         sesi_id: UUID sesi DCS.
+        paksa: Bila True, hapus sesi non-DRAFT beserta SELURUH responden &
+            jawabannya — **permanen, tidak dapat dibatalkan**. Gunakan dengan
+            hati-hati.
 
     Returns:
         Konfirmasi penghapusan.
     """
     try:
-        return await backend_delete(f"/api/v1/dcs/sesi/{sesi_id}", ctx=ctx)
+        return await backend_delete(f"/api/v1/dcs/sesi/{sesi_id}", ctx=ctx, params={"paksa": paksa})
     except BackendError as exc:
         _raise_tool_error(exc)
 
 
 @mcp.tool
-async def dcs_daftar_responden(ctx: Context, sesi_id: str) -> dict:
+async def dcs_daftar_responden(ctx: Context, sesi_id: str) -> list:
     """Ambil daftar responden pada sebuah sesi DCS.
 
     Args:
@@ -2217,8 +2236,13 @@ async def dcs_hapus_responden(ctx: Context, responden_id: str) -> dict:
 
 
 @mcp.tool
-async def dcs_submit_jawaban(ctx: Context, responden_id: str, jawaban: list[dict]) -> dict:
+async def dcs_submit_jawaban(ctx: Context, responden_id: str, jawaban: list[dict]) -> dict | list:
     """Submit jawaban kuesioner DCS untuk seorang responden.
+
+    Menyimpan seluruh jawaban sebagai draft (``PUT .../jawaban``) lalu langsung
+    memfinalisasi (``POST .../jawaban/submit``) — dua langkah backend dalam satu
+    panggilan tool. Gunakan endpoint draft-save backend langsung (via tool lain)
+    bila hanya ingin menyimpan progres parsial tanpa finalisasi.
 
     Args:
         responden_id: UUID responden.
@@ -2226,20 +2250,24 @@ async def dcs_submit_jawaban(ctx: Context, responden_id: str, jawaban: list[dict
             dengan ``skor_raw`` skala 1–5 dan ``item_id`` kode item orisinal (mis. ``D1a``).
 
     Returns:
-        Konfirmasi penyimpanan jawaban.
+        Daftar jawaban tersimpan setelah finalisasi.
     """
     try:
-        return await backend_post(
+        await backend_put(
             f"/api/v1/dcs/sesi/responden/{responden_id}/jawaban",
             ctx=ctx,
             body={"jawaban": jawaban},
+        )
+        return await backend_post(
+            f"/api/v1/dcs/sesi/responden/{responden_id}/jawaban/submit",
+            ctx=ctx,
         )
     except BackendError as exc:
         _raise_tool_error(exc)
 
 
 @mcp.tool
-async def dcs_daftar_jawaban(ctx: Context, responden_id: str) -> dict:
+async def dcs_daftar_jawaban(ctx: Context, responden_id: str) -> list:
     """Ambil jawaban DCS yang sudah diisi seorang responden.
 
     Args:
@@ -2332,7 +2360,7 @@ async def dcs_perbarui_item(
 
 
 @mcp.tool
-async def dcs_kuesioner_saya(ctx: Context) -> dict:
+async def dcs_kuesioner_saya(ctx: Context) -> list:
     """Ambil daftar kuesioner DCS yang di-assign ke saya (responden).
 
     Returns:
@@ -2445,26 +2473,30 @@ async def perbarui_wcp_sesi(
 
 
 @mcp.tool
-async def hapus_wcp_sesi(ctx: Context, sesi_id: str) -> dict:
+async def hapus_wcp_sesi(ctx: Context, sesi_id: str, paksa: bool = False) -> dict:
     """Hapus sesi WCP berdasarkan ID.
 
     **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
-    bukan admin).
+    bukan admin). Sesi berstatus DRAFT dapat dihapus langsung; sesi di status lain
+    ditolak (422) kecuali ``paksa=True``.
 
     Args:
         sesi_id: UUID sesi WCP.
+        paksa: Bila True, hapus sesi non-DRAFT beserta SELURUH responden &
+            jawabannya — **permanen, tidak dapat dibatalkan**. Gunakan dengan
+            hati-hati.
 
     Returns:
         Konfirmasi penghapusan.
     """
     try:
-        return await backend_delete(f"/api/v1/wcp/sesi/{sesi_id}", ctx=ctx)
+        return await backend_delete(f"/api/v1/wcp/sesi/{sesi_id}", ctx=ctx, params={"paksa": paksa})
     except BackendError as exc:
         _raise_tool_error(exc)
 
 
 @mcp.tool
-async def wcp_daftar_responden(ctx: Context, sesi_id: str) -> dict:
+async def wcp_daftar_responden(ctx: Context, sesi_id: str) -> list:
     """Ambil daftar responden pada sebuah sesi WCP.
 
     Args:
@@ -2515,8 +2547,12 @@ async def wcp_hapus_responden(ctx: Context, responden_id: str) -> dict:
 
 
 @mcp.tool
-async def wcp_submit_jawaban(ctx: Context, responden_id: str, jawaban: list[dict]) -> dict:
+async def wcp_submit_jawaban(ctx: Context, responden_id: str, jawaban: list[dict]) -> dict | list:
     """Submit jawaban kuesioner WCP untuk seorang responden.
+
+    Menyimpan seluruh jawaban sebagai draft (``PUT .../jawaban``) lalu langsung
+    memfinalisasi (``POST .../jawaban/submit``) — dua langkah backend dalam satu
+    panggilan tool.
 
     Args:
         responden_id: UUID responden.
@@ -2524,20 +2560,24 @@ async def wcp_submit_jawaban(ctx: Context, responden_id: str, jawaban: list[dict
             dengan ``skor_raw`` skala 1–5 dan ``item_id`` kode item orisinal (mis. ``SC1a``).
 
     Returns:
-        Konfirmasi penyimpanan jawaban.
+        Daftar jawaban tersimpan setelah finalisasi.
     """
     try:
-        return await backend_post(
+        await backend_put(
             f"/api/v1/wcp/sesi/responden/{responden_id}/jawaban",
             ctx=ctx,
             body={"jawaban": jawaban},
+        )
+        return await backend_post(
+            f"/api/v1/wcp/sesi/responden/{responden_id}/jawaban/submit",
+            ctx=ctx,
         )
     except BackendError as exc:
         _raise_tool_error(exc)
 
 
 @mcp.tool
-async def wcp_daftar_jawaban(ctx: Context, responden_id: str) -> dict:
+async def wcp_daftar_jawaban(ctx: Context, responden_id: str) -> list:
     """Ambil jawaban WCP yang sudah diisi seorang responden.
 
     Args:
@@ -2553,7 +2593,7 @@ async def wcp_daftar_jawaban(ctx: Context, responden_id: str) -> dict:
 
 
 @mcp.tool
-async def wcp_daftar_dimensi(ctx: Context) -> dict:
+async def wcp_daftar_dimensi(ctx: Context) -> list:
     """Ambil daftar dimensi WCP (master instrumen).
 
     Returns:
@@ -2582,7 +2622,7 @@ async def wcp_detail_dimensi(ctx: Context, kode: str) -> dict:
 
 
 @mcp.tool
-async def wcp_dimensi_items(ctx: Context, kode: str) -> dict:
+async def wcp_dimensi_items(ctx: Context, kode: str) -> list:
     """Ambil daftar item pernyataan pada sebuah dimensi WCP.
 
     Args:
@@ -2630,7 +2670,7 @@ async def wcp_perbarui_item(
 
 
 @mcp.tool
-async def wcp_kuesioner_saya(ctx: Context) -> dict:
+async def wcp_kuesioner_saya(ctx: Context) -> list:
     """Ambil daftar kuesioner WCP yang di-assign ke saya (responden).
 
     Returns:
@@ -2667,20 +2707,24 @@ async def wcp_hasil_responden(ctx: Context, responden_id: str) -> dict:
 
 
 @mcp.tool
-async def hapus_opm_sesi(ctx: Context, sesi_id: str) -> dict:
+async def hapus_opm_sesi(ctx: Context, sesi_id: str, paksa: bool = False) -> dict:
     """Hapus sesi OPM berdasarkan ID.
 
     **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
-    bukan admin).
+    bukan admin). Sesi berstatus DRAFT dapat dihapus langsung; sesi di status lain
+    ditolak (422) kecuali ``paksa=True``.
 
     Args:
         sesi_id: UUID sesi OPM.
+        paksa: Bila True, hapus sesi non-DRAFT beserta SELURUH responden &
+            jawabannya — **permanen, tidak dapat dibatalkan**. Gunakan dengan
+            hati-hati.
 
     Returns:
         Konfirmasi penghapusan.
     """
     try:
-        return await backend_delete(f"/api/v1/opm/sesi/{sesi_id}", ctx=ctx)
+        return await backend_delete(f"/api/v1/opm/sesi/{sesi_id}", ctx=ctx, params={"paksa": paksa})
     except BackendError as exc:
         _raise_tool_error(exc)
 
@@ -2829,7 +2873,7 @@ async def hapus_ts_penugasan(ctx: Context, penugasan_id: str) -> dict:
 
 
 @mcp.tool
-async def ts_daftar_log(ctx: Context, penugasan_id: str) -> dict:
+async def ts_daftar_log(ctx: Context, penugasan_id: str) -> list:
     """Ambil daftar log harian Time Study milik sebuah penugasan.
 
     Args:
@@ -2982,7 +3026,7 @@ async def ts_perbarui_log(
 
 
 @mcp.tool
-async def ts_kuesioner_saya(ctx: Context) -> dict:
+async def ts_kuesioner_saya(ctx: Context) -> list:
     """Ambil daftar kuesioner Time Study yang di-assign ke saya (responden).
 
     Returns:

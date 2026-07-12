@@ -15,6 +15,7 @@ from anjab_abk_mcp.server import mcp
 _GET = "anjab_abk_mcp.server.backend_get"
 _POST = "anjab_abk_mcp.server.backend_post"
 _PATCH = "anjab_abk_mcp.server.backend_patch"
+_PUT = "anjab_abk_mcp.server.backend_put"
 _DELETE = "anjab_abk_mcp.server.backend_delete"
 
 
@@ -175,6 +176,17 @@ async def test_hapus_opm_sesi():
             result = await client.call_tool("hapus_opm_sesi", {"sesi_id": "opm-1"})
     assert result.data["ok"] is True
     assert "/api/v1/opm/sesi/opm-1" in m.await_args.args[0]
+    assert m.await_args.kwargs["params"] == {"paksa": False}
+
+
+@pytest.mark.asyncio
+async def test_hapus_dcs_sesi_paksa_diteruskan():
+    with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("hapus_dcs_sesi", {"sesi_id": "dses-1", "paksa": True})
+    assert result.data["ok"] is True
+    assert "/api/v1/dcs/sesi/dses-1" in m.await_args.args[0]
+    assert m.await_args.kwargs["params"] == {"paksa": True}
 
 
 @pytest.mark.asyncio
@@ -290,13 +302,55 @@ async def test_hapus_jabatan():
 
 @pytest.mark.asyncio
 async def test_dcs_submit_jawaban():
-    with patch(_POST, new_callable=AsyncMock, return_value={"ok": True}) as m:
+    """PUT (draft-save) lalu POST .../submit — dua panggilan backend, bukan satu."""
+    jawaban_final = [{"item_id": "D1a", "skor_raw": 4}]
+    with (
+        patch(_PUT, new_callable=AsyncMock, return_value=jawaban_final) as m_put,
+        patch(_POST, new_callable=AsyncMock, return_value=jawaban_final) as m_post,
+    ):
         async with Client(mcp) as client:
-            await client.call_tool(
+            result = await client.call_tool(
                 "dcs_submit_jawaban",
-                {"responden_id": "r1", "jawaban": [{"item_id": "D1a", "skor_raw": 4}]},
+                {"responden_id": "r1", "jawaban": jawaban_final},
             )
-    assert m.await_args.kwargs["body"]["jawaban"][0]["item_id"] == "D1a"
+    assert m_put.await_args.kwargs["body"]["jawaban"][0]["item_id"] == "D1a"
+    assert m_put.await_args.args[0] == "/api/v1/dcs/sesi/responden/r1/jawaban"
+    assert m_post.await_args.args[0] == "/api/v1/dcs/sesi/responden/r1/jawaban/submit"
+    assert result.data == jawaban_final
+
+
+@pytest.mark.asyncio
+async def test_wcp_submit_jawaban():
+    jawaban_final = [{"item_id": "SC1a", "skor_raw": 3}]
+    with (
+        patch(_PUT, new_callable=AsyncMock, return_value=jawaban_final) as m_put,
+        patch(_POST, new_callable=AsyncMock, return_value=jawaban_final) as m_post,
+    ):
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "wcp_submit_jawaban",
+                {"responden_id": "r1", "jawaban": jawaban_final},
+            )
+    assert m_put.await_args.args[0] == "/api/v1/wcp/sesi/responden/r1/jawaban"
+    assert m_post.await_args.args[0] == "/api/v1/wcp/sesi/responden/r1/jawaban/submit"
+    assert result.data == jawaban_final
+
+
+@pytest.mark.asyncio
+async def test_ti_submit_detail():
+    detail_final = [{"task_kode": "TI001", "sumber_bukti": "Formal"}]
+    with (
+        patch(_PUT, new_callable=AsyncMock, return_value=detail_final) as m_put,
+        patch(_POST, new_callable=AsyncMock, return_value=detail_final) as m_post,
+    ):
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "ti_submit_detail",
+                {"responden_id": "r1", "detail": detail_final},
+            )
+    assert m_put.await_args.args[0] == "/api/v1/task-inventory/sesi/responden/r1/detail"
+    assert m_post.await_args.args[0] == "/api/v1/task-inventory/sesi/responden/r1/detail/submit"
+    assert result.data == detail_final
 
 
 # ── Katalog Task Inventory (TugasPokok, DetilTugas, UraianTugas) ──────────────

@@ -152,6 +152,16 @@ async def backend_request(
         else:
             response = await _send(token)
 
+    # 204/304 tidak membawa body (dan httpx menganggap 304 BUKAN is_success karena
+    # di luar rentang 2xx) — tangani dulu sebelum pengecekan error di bawah.
+    if response.status_code in (204, 304) or not response.content:
+        if not response.is_success and response.status_code != 304:
+            raise BackendError(
+                f"Backend error {response.status_code}: (tanpa body)",
+                status_code=response.status_code,
+            )
+        return {}
+
     if not response.is_success:
         try:
             detail = response.json().get("detail", response.text)
@@ -162,7 +172,12 @@ async def backend_request(
             status_code=response.status_code,
         )
 
-    return response.json()
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise BackendError(
+            f"Response backend bukan JSON valid (HTTP {response.status_code})."
+        ) from exc
 
 
 async def backend_get(path: str, *, ctx: object | None = None, **params: object) -> object:
@@ -199,6 +214,28 @@ async def backend_patch(
     return await backend_request("PATCH", path, ctx=ctx, json=body, params=params or None)
 
 
-async def backend_delete(path: str, *, ctx: object | None = None) -> object:
-    """DELETE request ke backend."""
-    return await backend_request("DELETE", path, ctx=ctx)
+async def backend_put(
+    path: str,
+    *,
+    ctx: object | None = None,
+    body: object,
+    params: dict[str, object] | None = None,
+) -> object:
+    """PUT request ke backend (simpan draft parsial). ``body`` dikirim sebagai JSON."""
+    return await backend_request("PUT", path, ctx=ctx, json=body, params=params or None)
+
+
+async def backend_delete(
+    path: str,
+    *,
+    ctx: object | None = None,
+    params: dict[str, object] | None = None,
+) -> object:
+    """DELETE request ke backend.
+
+    Args:
+        path: Path endpoint.
+        ctx: FastMCP Context (opsional) untuk Bearer token.
+        params: Query parameters opsional (mis. ``paksa``).
+    """
+    return await backend_request("DELETE", path, ctx=ctx, params=params or None)
