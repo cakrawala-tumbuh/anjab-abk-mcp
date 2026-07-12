@@ -6,6 +6,15 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-12
+
+### Ditambahkan
+
+- **Tool `ti_catalog_purge` & `ti_catalog_reseed`** — mencerminkan endpoint
+  admin `POST /task-inventory/catalog/purge` dan `/reseed` di
+  `anjab-abk-backend` v0.28.0. Memungkinkan purge total + reseed katalog
+  master Task Inventory langsung dari Claude tanpa akses `DATABASE_URL`.
+
 ## [0.10.1] - 2026-07-12
 
 ### Fixed

@@ -198,6 +198,26 @@ async def test_opm_hapus_responden():
     assert "/api/v1/opm/sesi/responden/r1" in m.await_args.args[0]
 
 
+@pytest.mark.asyncio
+async def test_ti_catalog_purge():
+    payload = {"deleted": {"uraian_tugas": 10, "detil_tugas": 3, "tugas_pokok": 2}}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("ti_catalog_purge", {})
+    assert result.data == payload
+    assert "/api/v1/task-inventory/catalog/purge" in m.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_ti_catalog_reseed():
+    payload = {"created": {"jabatan": 5, "tugas_pokok": 2, "detil_tugas": 3, "uraian_tugas": 10}}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("ti_catalog_reseed", {})
+    assert result.data == payload
+    assert "/api/v1/task-inventory/catalog/reseed" in m.await_args.args[0]
+
+
 # ── Kelengkapan tool baru ──────────────────────────────────────────────────────
 
 
@@ -244,6 +264,8 @@ async def test_semua_endpoint_punya_tool():
         "detail_uraian_tugas",
         "perbarui_uraian_tugas",
         "hapus_uraian_tugas",
+        "ti_catalog_purge",
+        "ti_catalog_reseed",
         # OPM (delete-only)
         "hapus_opm_sesi",
         "opm_hapus_responden",

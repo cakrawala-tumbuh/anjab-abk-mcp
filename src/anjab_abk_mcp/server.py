@@ -2077,6 +2077,41 @@ async def ti_catalog_kombinasi(ctx: Context) -> list:
         _raise_tool_error(exc)
 
 
+@mcp.tool
+async def ti_catalog_purge(ctx: Context) -> dict:
+    """Purge (hapus total) katalog master Task Inventory (admin-only).
+
+    Menghapus SELURUH baris ti_uraian_tugas, ti_tugas_pokok, ti_detil_tugas. DITOLAK
+    (409) bila masih ada sesi Task Inventory (status apa pun) — ti_seleksi/ti_tahap2/
+    ti_detail merujuk katalog lewat task_kode (bukan FK), purge saat ada sesi merusak
+    data transaksi. Panggil daftar_ti_sesi dulu untuk memastikan totalnya nol. Biasanya
+    diikuti ti_catalog_reseed untuk mengisi ulang.
+
+    Returns:
+        {"deleted": {"uraian_tugas": int, "detil_tugas": int, "tugas_pokok": int}}
+    """
+    try:
+        return await backend_post("/api/v1/task-inventory/catalog/purge", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def ti_catalog_reseed(ctx: Context) -> dict:
+    """Reseed katalog master Task Inventory dari task_catalog.json bawaan (admin-only).
+
+    Idempoten (insert-if-absent) — aman dipanggil di katalog yang sudah terisi
+    sebagian. Untuk penggantian total katalog, panggil ti_catalog_purge dulu.
+
+    Returns:
+        {"created": {"jabatan": int, "tugas_pokok": int, "detil_tugas": int, "uraian_tugas": int}}
+    """
+    try:
+        return await backend_post("/api/v1/task-inventory/catalog/reseed", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
 # ════════════════════════════════════════════════════════════════════════════════
 # DCS — kelengkapan (get/search/update/delete, responden, jawaban, sub-skala,
 # item, kuesioner, hasil responden)
