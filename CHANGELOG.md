@@ -6,6 +6,39 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-12
+
+### Added
+
+- **Domain OPM**: `hapus_opm_sesi` (`DELETE /opm/sesi/{id}`) dan
+  `opm_hapus_responden` (`DELETE /opm/sesi/responden/{id}`) — sebelumnya OPM
+  tidak punya tool MCP sama sekali. Sisa domain OPM (buat sesi, tambah
+  responden, submit jawaban, analisis, hasil) tetap di luar lingkup — lihat
+  `plan-lengkapi-delete-mcp.md`.
+- **Time Study**: `daftar_ts_penugasan`, `buat_ts_penugasan`,
+  `detail_ts_penugasan`, `perbarui_ts_penugasan`, `hapus_ts_penugasan` —
+  menggantikan tool berbasis sesi yang sudah dihapus dari backend.
+
+### Changed (Breaking)
+
+- **Time Study**: backend menghapus konsep sesi TS (revisi 2026-07-04),
+  digantikan penugasan per partisipan. Tool lama yang memanggil
+  `/time-study/sesi/*` sudah 404 dan dihapus: `daftar_ts_sesi`, `buat_ts_sesi`,
+  `ts_buka_sesi`, `ts_tutup_sesi`, `ts_tambah_responden`, `ts_analisis`,
+  `detail_ts_sesi`, `perbarui_ts_sesi`, `hapus_ts_sesi`, `ts_daftar_responden`,
+  `ts_hapus_responden`. `ts_daftar_log`, `ts_buat_log`, `ts_detail_log`, dan
+  `ts_perbarui_log` dipertahankan tetapi parameter `responden_id` diganti
+  `penugasan_id` (path berubah dari `/time-study/responden/{id}/log` menjadi
+  `/time-study/penugasan/{id}/log`).
+
+### Fixed
+
+- Docstring `hapus_dcs_sesi`, `dcs_hapus_responden`, `hapus_ti_sesi`,
+  `ti_hapus_responden`, `hapus_wcp_sesi`, `wcp_hapus_responden` kini menyatakan
+  eksplisit bahwa tool ini hanya bisa dijalankan admin (backend menolak 403
+  untuk token non-admin) — sebelumnya tidak disebutkan sehingga Claude bisa
+  menyarankan pemakaiannya ke partisipan biasa.
+
 ## [0.8.0] - 2026-06-23
 
 ### Changed

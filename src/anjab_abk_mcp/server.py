@@ -13,7 +13,8 @@ Tools dikelompokkan per domain:
   - task_inventory: sesi TI (3 tahap), responden, hasil
   - dcs:            sesi DCS, responden, hasil
   - wcp:            sesi WCP, responden, hasil
-  - time_study:     sesi TS, responden, analisis
+  - opm:            sesi OPM (delete-only; sisa domain — lihat rencana-opm.md)
+  - time_study:     penugasan TS per partisipan, log harian, kuesioner
 """
 
 from __future__ import annotations
@@ -942,149 +943,6 @@ async def wcp_hasil(ctx: Context, sesi_id: str) -> dict:
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# DOMAIN: TIME STUDY (TS)
-# ════════════════════════════════════════════════════════════════════════════════
-
-
-@mcp.tool
-async def daftar_ts_sesi(
-    ctx: Context,
-    limit: int = 20,
-    offset: int = 0,
-) -> dict:
-    """Ambil daftar sesi Time Study (TS).
-
-    Time Study mengukur alokasi waktu kerja per kategori aktivitas (core,
-    character, improve, strategic, admin, recovery) berdasarkan log harian.
-
-    Args:
-        limit: Jumlah item per halaman (maks 100, default 20).
-        offset: Jumlah item yang dilewati untuk paginasi (default 0).
-
-    Returns:
-        Dict dengan keys ``items`` (list sesi TS) dan ``total`` (total record).
-    """
-    try:
-        return await backend_get("/api/v1/time-study/sesi", ctx=ctx, limit=limit, offset=offset)
-    except BackendError as exc:
-        _raise_tool_error(exc)
-
-
-@mcp.tool
-async def buat_ts_sesi(
-    ctx: Context,
-    jabatan_id: str,
-    periode: str,
-    catatan: str | None = None,
-) -> dict:
-    """Buat sesi Time Study baru (status awal: DRAFT).
-
-    Args:
-        jabatan_id: UUID jabatan yang dianalisis.
-        periode: Periode studi, mis. ``2025/2026``.
-        catatan: Catatan tambahan (opsional).
-
-    Returns:
-        Data sesi TS yang baru dibuat termasuk ``id`` (UUID).
-    """
-    body: dict = {"jabatan_id": jabatan_id, "periode": periode}
-    if catatan is not None:
-        body["catatan"] = catatan
-    try:
-        return await backend_post("/api/v1/time-study/sesi", ctx=ctx, body=body)
-    except BackendError as exc:
-        _raise_tool_error(exc)
-
-
-@mcp.tool
-async def ts_buka_sesi(ctx: Context, sesi_id: str) -> dict:
-    """Buka sesi Time Study agar partisipan dapat mengisi log harian.
-
-    Transisi status: DRAFT → OPEN.
-
-    Args:
-        sesi_id: UUID sesi TS.
-
-    Returns:
-        Data sesi TS yang sudah diperbarui dengan status ``OPEN``.
-    """
-    try:
-        return await backend_post(f"/api/v1/time-study/sesi/{sesi_id}/buka", ctx=ctx, body={})
-    except BackendError as exc:
-        _raise_tool_error(exc)
-
-
-@mcp.tool
-async def ts_tutup_sesi(ctx: Context, sesi_id: str) -> dict:
-    """Tutup sesi Time Study (tidak ada pengisian log baru setelah ini).
-
-    Transisi status: OPEN → CLOSED.
-
-    Args:
-        sesi_id: UUID sesi TS.
-
-    Returns:
-        Data sesi TS yang sudah diperbarui dengan status ``CLOSED``.
-    """
-    try:
-        return await backend_post(f"/api/v1/time-study/sesi/{sesi_id}/tutup", ctx=ctx, body={})
-    except BackendError as exc:
-        _raise_tool_error(exc)
-
-
-@mcp.tool
-async def ts_tambah_responden(
-    ctx: Context,
-    sesi_id: str,
-    jabatan_label: str,
-    partisipan_id: str | None = None,
-    nama: str | None = None,
-) -> dict:
-    """Assign partisipan sebagai responden sesi Time Study.
-
-    Args:
-        sesi_id: UUID sesi TS.
-        jabatan_label: Label jabatan responden untuk keperluan display.
-        partisipan_id: UUID partisipan terdaftar (opsional).
-        nama: Nama responden eksternal (opsional bila ``partisipan_id`` diisi).
-
-    Returns:
-        Data responden TS yang baru dibuat termasuk ``id`` (UUID).
-    """
-    body: dict = {"jabatan_label": jabatan_label}
-    if partisipan_id is not None:
-        body["partisipan_id"] = partisipan_id
-    if nama is not None:
-        body["nama"] = nama
-    try:
-        return await backend_post(
-            f"/api/v1/time-study/sesi/{sesi_id}/responden", ctx=ctx, body=body
-        )
-    except BackendError as exc:
-        _raise_tool_error(exc)
-
-
-@mcp.tool
-async def ts_analisis(ctx: Context, sesi_id: str) -> dict:
-    """Jalankan dan ambil hasil analisis sesi Time Study.
-
-    Menghitung rata-rata alokasi waktu per kategori aktivitas dan persentasenya.
-    Tersedia setelah sesi berstatus CLOSED.
-
-    Args:
-        sesi_id: UUID sesi TS.
-
-    Returns:
-        Hasil analisis TS termasuk distribusi waktu per kategori (core,
-        character, improve, strategic, admin, recovery) dan total menit.
-    """
-    try:
-        return await backend_post(f"/api/v1/time-study/sesi/{sesi_id}/analisis", ctx=ctx)
-    except BackendError as exc:
-        _raise_tool_error(exc)
-
-
-# ════════════════════════════════════════════════════════════════════════════════
 # CORE — JENJANG PENDIDIKAN (lengkap: create/search/get/update/delete)
 # ════════════════════════════════════════════════════════════════════════════════
 
@@ -1760,7 +1618,8 @@ async def perbarui_sme_panel(
         panel_id: UUID SME Panel.
         aktif: Status aktif baru (opsional).
         koordinator_id: UUID partisipan koordinator panel (opsional). Koordinator
-            harus sudah menjadi anggota panel.
+            harus sudah menjadi anggota panel. Kirim ``"HAPUS"`` untuk menghapus
+            koordinator yang ada.
 
     Returns:
         Data SME Panel setelah diperbarui.
@@ -1768,7 +1627,9 @@ async def perbarui_sme_panel(
     body: dict = {}
     if aktif is not None:
         body["aktif"] = aktif
-    if koordinator_id is not None:
+    if koordinator_id == "HAPUS":
+        body["koordinator_id"] = None
+    elif koordinator_id is not None:
         body["koordinator_id"] = koordinator_id
     try:
         return await backend_patch(f"/api/v1/sme-panel/{panel_id}", ctx=ctx, body=body)
@@ -1915,7 +1776,8 @@ async def perbarui_ti_sesi(
     Args:
         sesi_id: UUID sesi TI.
         periode: Periode baru (opsional).
-        koordinator_id: UUID koordinator SME panel (opsional).
+        koordinator_id: UUID koordinator SME panel (opsional). Kirim ``"HAPUS"``
+            untuk menghapus koordinator yang ada.
         min_responden: Minimal responden (opsional).
         max_responden: Maksimal responden (opsional).
         catatan: Catatan baru (opsional).
@@ -1926,7 +1788,9 @@ async def perbarui_ti_sesi(
     body: dict = {}
     if periode is not None:
         body["periode"] = periode
-    if koordinator_id is not None:
+    if koordinator_id == "HAPUS":
+        body["koordinator_id"] = None
+    elif koordinator_id is not None:
         body["koordinator_id"] = koordinator_id
     if min_responden is not None:
         body["min_responden"] = min_responden
@@ -1943,6 +1807,9 @@ async def perbarui_ti_sesi(
 @mcp.tool
 async def hapus_ti_sesi(ctx: Context, sesi_id: str) -> dict:
     """Hapus sesi Task Inventory berdasarkan ID.
+
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
+    bukan admin).
 
     Args:
         sesi_id: UUID sesi TI.
@@ -1991,6 +1858,9 @@ async def ti_detail_responden(ctx: Context, responden_id: str) -> dict:
 @mcp.tool
 async def ti_hapus_responden(ctx: Context, responden_id: str) -> dict:
     """Hapus responden Task Inventory berdasarkan ID.
+
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
+    bukan admin).
 
     Args:
         responden_id: UUID responden.
@@ -2280,6 +2150,9 @@ async def perbarui_dcs_sesi(
 async def hapus_dcs_sesi(ctx: Context, sesi_id: str) -> dict:
     """Hapus sesi DCS berdasarkan ID.
 
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
+    bukan admin).
+
     Args:
         sesi_id: UUID sesi DCS.
 
@@ -2327,6 +2200,9 @@ async def dcs_detail_responden(ctx: Context, responden_id: str) -> dict:
 @mcp.tool
 async def dcs_hapus_responden(ctx: Context, responden_id: str) -> dict:
     """Hapus responden DCS berdasarkan ID.
+
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
+    bukan admin).
 
     Args:
         responden_id: UUID responden.
@@ -2572,6 +2448,9 @@ async def perbarui_wcp_sesi(
 async def hapus_wcp_sesi(ctx: Context, sesi_id: str) -> dict:
     """Hapus sesi WCP berdasarkan ID.
 
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
+    bukan admin).
+
     Args:
         sesi_id: UUID sesi WCP.
 
@@ -2619,6 +2498,9 @@ async def wcp_detail_responden(ctx: Context, responden_id: str) -> dict:
 @mcp.tool
 async def wcp_hapus_responden(ctx: Context, responden_id: str) -> dict:
     """Hapus responden WCP berdasarkan ID.
+
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
+    bukan admin).
 
     Args:
         responden_id: UUID responden.
@@ -2777,118 +2659,187 @@ async def wcp_hasil_responden(ctx: Context, responden_id: str) -> dict:
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# TIME STUDY (TS) — kelengkapan (get/update/delete sesi, responden, log,
-# kuesioner)
+# DOMAIN: OPM (Overall Priority Matrix)
 # ════════════════════════════════════════════════════════════════════════════════
+#
+# OPM menilai prioritas task (Importance/Frequency/Criticality) berbasis snapshot
+# task hasil sesi Task Inventory yang sudah frozen (lihat ti_task_terpilih).
 
 
 @mcp.tool
-async def detail_ts_sesi(ctx: Context, sesi_id: str) -> dict:
-    """Ambil detail satu sesi Time Study.
+async def hapus_opm_sesi(ctx: Context, sesi_id: str) -> dict:
+    """Hapus sesi OPM berdasarkan ID.
+
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
+    bukan admin).
 
     Args:
-        sesi_id: UUID sesi TS.
-
-    Returns:
-        Data sesi TS.
-    """
-    try:
-        return await backend_get(f"/api/v1/time-study/sesi/{sesi_id}", ctx=ctx)
-    except BackendError as exc:
-        _raise_tool_error(exc)
-
-
-@mcp.tool
-async def perbarui_ts_sesi(
-    ctx: Context,
-    sesi_id: str,
-    periode: str | None = None,
-    catatan: str | None = None,
-) -> dict:
-    """Perbarui sebagian field sesi Time Study.
-
-    Args:
-        sesi_id: UUID sesi TS.
-        periode: Periode baru (opsional).
-        catatan: Catatan baru (opsional).
-
-    Returns:
-        Data sesi TS setelah diperbarui.
-    """
-    body: dict = {}
-    if periode is not None:
-        body["periode"] = periode
-    if catatan is not None:
-        body["catatan"] = catatan
-    try:
-        return await backend_patch(f"/api/v1/time-study/sesi/{sesi_id}", ctx=ctx, body=body)
-    except BackendError as exc:
-        _raise_tool_error(exc)
-
-
-@mcp.tool
-async def hapus_ts_sesi(ctx: Context, sesi_id: str) -> dict:
-    """Hapus sesi Time Study berdasarkan ID.
-
-    Args:
-        sesi_id: UUID sesi TS.
+        sesi_id: UUID sesi OPM.
 
     Returns:
         Konfirmasi penghapusan.
     """
     try:
-        return await backend_delete(f"/api/v1/time-study/sesi/{sesi_id}", ctx=ctx)
+        return await backend_delete(f"/api/v1/opm/sesi/{sesi_id}", ctx=ctx)
     except BackendError as exc:
         _raise_tool_error(exc)
 
 
 @mcp.tool
-async def ts_daftar_responden(ctx: Context, sesi_id: str) -> dict:
-    """Ambil daftar responden pada sebuah sesi Time Study.
+async def opm_hapus_responden(ctx: Context, responden_id: str) -> dict:
+    """Hapus responden OPM berdasarkan ID.
+
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
+    bukan admin).
 
     Args:
-        sesi_id: UUID sesi TS.
-
-    Returns:
-        Daftar responden sesi.
-    """
-    try:
-        return await backend_get(f"/api/v1/time-study/sesi/{sesi_id}/responden", ctx=ctx)
-    except BackendError as exc:
-        _raise_tool_error(exc)
-
-
-@mcp.tool
-async def ts_hapus_responden(ctx: Context, sesi_id: str, responden_id: str) -> dict:
-    """Hapus responden Time Study dari sebuah sesi.
-
-    Args:
-        sesi_id: UUID sesi TS.
         responden_id: UUID responden.
 
     Returns:
         Konfirmasi penghapusan.
     """
     try:
-        return await backend_delete(
-            f"/api/v1/time-study/sesi/{sesi_id}/responden/{responden_id}", ctx=ctx
+        return await backend_delete(f"/api/v1/opm/sesi/responden/{responden_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# DOMAIN: TIME STUDY (TS) — penugasan per partisipan (bukan sesi)
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# Time Study tidak memakai konsep sesi — setiap partisipan mendapat satu
+# penugasan (aktif/nonaktif) dan mencatat log harian open-ended selama
+# penugasannya aktif. Mengukur alokasi waktu kerja per kategori aktivitas
+# (core, character, improve, strategic, admin, recovery).
+
+
+@mcp.tool
+async def daftar_ts_penugasan(
+    ctx: Context,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Ambil daftar penugasan Time Study (admin).
+
+    Args:
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict dengan keys ``items`` (list penugasan TS) dan ``total`` (total record).
+    """
+    try:
+        return await backend_get(
+            "/api/v1/time-study/penugasan", ctx=ctx, limit=limit, offset=offset
         )
     except BackendError as exc:
         _raise_tool_error(exc)
 
 
 @mcp.tool
-async def ts_daftar_log(ctx: Context, responden_id: str) -> dict:
-    """Ambil daftar log harian Time Study milik seorang responden.
+async def buat_ts_penugasan(
+    ctx: Context,
+    partisipan_id: str,
+    aktif: bool = True,
+    catatan: str | None = None,
+) -> dict:
+    """Tugaskan seorang partisipan untuk mencatat Time Study (admin).
 
     Args:
-        responden_id: UUID responden.
+        partisipan_id: UUID partisipan yang ditugaskan.
+        aktif: Status aktif penugasan (default True).
+        catatan: Catatan tambahan (opsional).
 
     Returns:
-        Daftar log harian responden.
+        Data penugasan TS yang baru dibuat termasuk ``id`` (UUID).
+    """
+    body: dict = {"partisipan_id": partisipan_id, "aktif": aktif}
+    if catatan is not None:
+        body["catatan"] = catatan
+    try:
+        return await backend_post("/api/v1/time-study/penugasan", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def detail_ts_penugasan(ctx: Context, penugasan_id: str) -> dict:
+    """Ambil detail satu penugasan Time Study (admin atau pemilik).
+
+    Args:
+        penugasan_id: UUID penugasan TS.
+
+    Returns:
+        Data penugasan TS.
     """
     try:
-        return await backend_get(f"/api/v1/time-study/responden/{responden_id}/log", ctx=ctx)
+        return await backend_get(f"/api/v1/time-study/penugasan/{penugasan_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def perbarui_ts_penugasan(
+    ctx: Context,
+    penugasan_id: str,
+    aktif: bool | None = None,
+    catatan: str | None = None,
+) -> dict:
+    """Perbarui sebagian field penugasan Time Study (admin; mis. nonaktifkan).
+
+    Args:
+        penugasan_id: UUID penugasan TS.
+        aktif: Status aktif baru (opsional).
+        catatan: Catatan baru (opsional).
+
+    Returns:
+        Data penugasan TS setelah diperbarui.
+    """
+    body: dict = {}
+    if aktif is not None:
+        body["aktif"] = aktif
+    if catatan is not None:
+        body["catatan"] = catatan
+    try:
+        return await backend_patch(
+            f"/api/v1/time-study/penugasan/{penugasan_id}", ctx=ctx, body=body
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def hapus_ts_penugasan(ctx: Context, penugasan_id: str) -> dict:
+    """Hapus penugasan Time Study berdasarkan ID.
+
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
+    bukan admin).
+
+    Args:
+        penugasan_id: UUID penugasan TS.
+
+    Returns:
+        Konfirmasi penghapusan.
+    """
+    try:
+        return await backend_delete(f"/api/v1/time-study/penugasan/{penugasan_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def ts_daftar_log(ctx: Context, penugasan_id: str) -> dict:
+    """Ambil daftar log harian Time Study milik sebuah penugasan.
+
+    Args:
+        penugasan_id: UUID penugasan TS.
+
+    Returns:
+        Daftar log harian penugasan.
+    """
+    try:
+        return await backend_get(f"/api/v1/time-study/penugasan/{penugasan_id}/log", ctx=ctx)
     except BackendError as exc:
         _raise_tool_error(exc)
 
@@ -2896,7 +2847,7 @@ async def ts_daftar_log(ctx: Context, responden_id: str) -> dict:
 @mcp.tool
 async def ts_buat_log(
     ctx: Context,
-    responden_id: str,
+    penugasan_id: str,
     tanggal: str,
     waktu_masuk: str,
     waktu_keluar: str,
@@ -2909,10 +2860,10 @@ async def ts_buat_log(
     menit_recovery: int,
     catatan: str | None = None,
 ) -> dict:
-    """Buat satu log harian Time Study untuk seorang responden.
+    """Buat satu log harian Time Study untuk sebuah penugasan.
 
     Args:
-        responden_id: UUID responden.
+        penugasan_id: UUID penugasan TS.
         tanggal: Tanggal log (ISO ``YYYY-MM-DD``).
         waktu_masuk: Jam masuk (mis. ``07:00``).
         waktu_keluar: Jam keluar (mis. ``16:00``).
@@ -2944,18 +2895,18 @@ async def ts_buat_log(
         body["catatan"] = catatan
     try:
         return await backend_post(
-            f"/api/v1/time-study/responden/{responden_id}/log", ctx=ctx, body=body
+            f"/api/v1/time-study/penugasan/{penugasan_id}/log", ctx=ctx, body=body
         )
     except BackendError as exc:
         _raise_tool_error(exc)
 
 
 @mcp.tool
-async def ts_detail_log(ctx: Context, responden_id: str, log_id: str) -> dict:
+async def ts_detail_log(ctx: Context, penugasan_id: str, log_id: str) -> dict:
     """Ambil satu log harian Time Study.
 
     Args:
-        responden_id: UUID responden.
+        penugasan_id: UUID penugasan TS.
         log_id: UUID log.
 
     Returns:
@@ -2963,7 +2914,7 @@ async def ts_detail_log(ctx: Context, responden_id: str, log_id: str) -> dict:
     """
     try:
         return await backend_get(
-            f"/api/v1/time-study/responden/{responden_id}/log/{log_id}", ctx=ctx
+            f"/api/v1/time-study/penugasan/{penugasan_id}/log/{log_id}", ctx=ctx
         )
     except BackendError as exc:
         _raise_tool_error(exc)
@@ -2972,7 +2923,7 @@ async def ts_detail_log(ctx: Context, responden_id: str, log_id: str) -> dict:
 @mcp.tool
 async def ts_perbarui_log(
     ctx: Context,
-    responden_id: str,
+    penugasan_id: str,
     log_id: str,
     tanggal: str | None = None,
     waktu_masuk: str | None = None,
@@ -2989,7 +2940,7 @@ async def ts_perbarui_log(
     """Perbarui sebagian field log harian Time Study.
 
     Args:
-        responden_id: UUID responden.
+        penugasan_id: UUID penugasan TS.
         log_id: UUID log.
         tanggal: Tanggal baru (opsional).
         waktu_masuk: Jam masuk baru (opsional).
@@ -3024,7 +2975,7 @@ async def ts_perbarui_log(
             body[key] = val
     try:
         return await backend_patch(
-            f"/api/v1/time-study/responden/{responden_id}/log/{log_id}", ctx=ctx, body=body
+            f"/api/v1/time-study/penugasan/{penugasan_id}/log/{log_id}", ctx=ctx, body=body
         )
     except BackendError as exc:
         _raise_tool_error(exc)

@@ -32,7 +32,7 @@ async def test_tools_terdaftar():
     assert "daftar_ti_sesi" in names
     assert "daftar_dcs_sesi" in names
     assert "daftar_wcp_sesi" in names
-    assert "daftar_ts_sesi" in names
+    assert "daftar_ts_penugasan" in names
 
 
 @pytest.mark.asyncio
@@ -115,12 +115,75 @@ async def test_daftar_wcp_sesi():
 
 
 @pytest.mark.asyncio
-async def test_daftar_ts_sesi():
+async def test_daftar_ts_penugasan():
     payload = {"items": [], "total": 0}
     with patch(_GET, new_callable=AsyncMock, return_value=payload):
         async with Client(mcp) as client:
-            result = await client.call_tool("daftar_ts_sesi", {})
+            result = await client.call_tool("daftar_ts_penugasan", {})
     assert result.data["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_buat_ts_penugasan():
+    payload = {"id": "tpn-baru", "partisipan_id": "par-1", "aktif": True}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("buat_ts_penugasan", {"partisipan_id": "par-1"})
+    assert result.data["id"] == "tpn-baru"
+    assert "/api/v1/time-study/penugasan" in m.await_args.args[0]
+    assert m.await_args.kwargs["body"] == {"partisipan_id": "par-1", "aktif": True}
+
+
+@pytest.mark.asyncio
+async def test_hapus_ts_penugasan():
+    with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("hapus_ts_penugasan", {"penugasan_id": "tpn-1"})
+    assert result.data["ok"] is True
+    assert "/api/v1/time-study/penugasan/tpn-1" in m.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_ts_buat_log_path_penugasan():
+    payload = {"id": "log-1"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "ts_buat_log",
+                {
+                    "penugasan_id": "tpn-1",
+                    "tanggal": "2026-07-01",
+                    "waktu_masuk": "07:00",
+                    "waktu_keluar": "16:00",
+                    "day_color": "green",
+                    "menit_core": 100,
+                    "menit_character": 10,
+                    "menit_improve": 10,
+                    "menit_strategic": 10,
+                    "menit_admin": 10,
+                    "menit_recovery": 10,
+                },
+            )
+    assert result.data["id"] == "log-1"
+    assert "/api/v1/time-study/penugasan/tpn-1/log" in m.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_hapus_opm_sesi():
+    with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("hapus_opm_sesi", {"sesi_id": "opm-1"})
+    assert result.data["ok"] is True
+    assert "/api/v1/opm/sesi/opm-1" in m.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_opm_hapus_responden():
+    with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("opm_hapus_responden", {"responden_id": "r1"})
+    assert result.data["ok"] is True
+    assert "/api/v1/opm/sesi/responden/r1" in m.await_args.args[0]
 
 
 # ── Kelengkapan tool baru ──────────────────────────────────────────────────────
@@ -169,9 +232,19 @@ async def test_semua_endpoint_punya_tool():
         "detail_uraian_tugas",
         "perbarui_uraian_tugas",
         "hapus_uraian_tugas",
+        # OPM (delete-only)
+        "hapus_opm_sesi",
+        "opm_hapus_responden",
+        # Time Study (penugasan per partisipan, bukan sesi)
+        "daftar_ts_penugasan",
+        "buat_ts_penugasan",
+        "detail_ts_penugasan",
+        "perbarui_ts_penugasan",
+        "hapus_ts_penugasan",
+        "ts_kuesioner_saya",
     ]:
         assert nm in names, f"tool {nm} tidak terdaftar"
-    assert len(names) >= 138
+    assert len(names) >= 142
 
 
 @pytest.mark.asyncio
