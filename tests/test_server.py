@@ -34,6 +34,10 @@ async def test_tools_terdaftar():
     assert "dcs_instrumen" in names
     assert "wcp_instrumen" in names
     assert "daftar_ts_penugasan" in names
+    assert "buat_ts_penugasan_banyak" in names
+    assert "ti_tambah_responden_banyak" in names
+    assert "opm_tambah_responden" in names
+    assert "opm_tambah_responden_banyak" in names
 
 
 @pytest.mark.asyncio
@@ -95,6 +99,20 @@ async def test_ti_tambah_responden_tanpa_arg_raise():
     async with Client(mcp) as client:
         with pytest.raises(Exception):
             await client.call_tool("ti_tambah_responden", {"sesi_id": "uuid-sesi"})
+
+
+@pytest.mark.asyncio
+async def test_ti_tambah_responden_banyak():
+    payload = {"created": [{"id": "trsp-1"}, {"id": "trsp-2"}], "skipped": []}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "ti_tambah_responden_banyak",
+                {"sesi_id": "uuid-sesi", "partisipan_ids": ["p1", "p2"]},
+            )
+    assert len(result.data["created"]) == 2
+    assert m.await_args.args[0] == "/api/v1/task-inventory/sesi/uuid-sesi/responden/bulk"
+    assert m.await_args.kwargs["body"] == {"partisipan_ids": ["p1", "p2"]}
 
 
 @pytest.mark.asyncio
@@ -294,6 +312,22 @@ async def test_buat_ts_penugasan():
 
 
 @pytest.mark.asyncio
+async def test_buat_ts_penugasan_banyak():
+    payload = {"created": [{"id": "tpn-1"}, {"id": "tpn-2"}], "skipped": []}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "buat_ts_penugasan_banyak", {"partisipan_ids": ["par-1", "par-2"]}
+            )
+    assert len(result.data["created"]) == 2
+    assert m.await_args.args[0] == "/api/v1/time-study/penugasan/bulk"
+    assert m.await_args.kwargs["body"] == {
+        "partisipan_ids": ["par-1", "par-2"],
+        "aktif": True,
+    }
+
+
+@pytest.mark.asyncio
 async def test_hapus_ts_penugasan():
     with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
         async with Client(mcp) as client:
@@ -354,6 +388,37 @@ async def test_wcp_hapus_responden_tanpa_sesi():
             result = await client.call_tool("wcp_hapus_responden", {"responden_id": "r1"})
     assert result.data["ok"] is True
     assert m.await_args.args[0] == "/api/v1/wcp/responden/r1"
+
+
+@pytest.mark.asyncio
+async def test_opm_tambah_responden():
+    payload = {"id": "oprs-1", "partisipan_id": "par-1", "jabatan_label": "Guru"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "opm_tambah_responden",
+                {"sesi_id": "opm-1", "partisipan_id": "par-1", "jabatan_label": "Guru"},
+            )
+    assert result.data["id"] == "oprs-1"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1/responden"
+    assert m.await_args.kwargs["body"] == {
+        "partisipan_id": "par-1",
+        "jabatan_label": "Guru",
+    }
+
+
+@pytest.mark.asyncio
+async def test_opm_tambah_responden_banyak():
+    payload = {"created": [{"id": "oprs-1"}], "skipped": []}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "opm_tambah_responden_banyak",
+                {"sesi_id": "opm-1", "partisipan_ids": ["par-1"]},
+            )
+    assert len(result.data["created"]) == 1
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1/responden/bulk"
+    assert m.await_args.kwargs["body"] == {"partisipan_ids": ["par-1"]}
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,7 @@ Tools dikelompokkan per domain:
   - task_inventory: sesi TI (3 tahap), responden, hasil
   - dcs:            instrumen DCS singleton (tanpa sesi), responden, hasil
   - wcp:            instrumen WCP singleton (tanpa sesi), responden, hasil
-  - opm:            sesi OPM (delete-only; sisa domain — lihat rencana-opm.md)
+  - opm:            sesi OPM (tambah responden single+bulk, hapus responden & sesi)
   - time_study:     penugasan TS per partisipan, log harian, kuesioner
 """
 
@@ -503,6 +503,39 @@ async def ti_tambah_responden(
     try:
         return await backend_post(
             f"/api/v1/task-inventory/sesi/{sesi_id}/responden", ctx=ctx, body=body
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def ti_tambah_responden_banyak(ctx: Context, sesi_id: str, partisipan_ids: list[str]) -> dict:
+    """Tugaskan (assign) banyak partisipan sekaligus sebagai responden Task Inventory
+    (admin, idempoten).
+
+    Berbeda dari ``ti_tambah_responden`` (satu partisipan per panggilan, boleh
+    anonim tanpa ``partisipan_id``), tool ini HANYA menerima partisipan yang
+    wajib anggota SME panel jabatan sesi ini — yang bukan anggota akan muncul
+    di ``skipped`` dengan alasan ``bukan_anggota_sme_panel``, bukan ditolak
+    seluruhnya. Sesi baru untuk jabatan yang sudah punya SME panel berisi
+    anggota otomatis mendapat responden dari panel itu tanpa panggilan tool
+    apa pun (auto-populate saat sesi dibuat) — tool ini untuk menambah anggota
+    panel yang bergabung setelahnya, atau melengkapi yang terlewat.
+
+    Args:
+        sesi_id: UUID sesi Task Inventory.
+        partisipan_ids: Daftar UUID partisipan (wajib anggota SME panel jabatan sesi).
+
+    Returns:
+        ``{"created": [...], "skipped": [{"partisipan_id": ..., "alasan": ...}]}``.
+        Alasan skip: ``sudah_terdaftar``, ``duplikat_input``,
+        ``bukan_anggota_sme_panel``, atau ``kapasitas_penuh``.
+    """
+    try:
+        return await backend_post(
+            f"/api/v1/task-inventory/sesi/{sesi_id}/responden/bulk",
+            ctx=ctx,
+            body={"partisipan_ids": partisipan_ids},
         )
     except BackendError as exc:
         _raise_tool_error(exc)
@@ -2630,6 +2663,71 @@ async def hapus_opm_sesi(ctx: Context, sesi_id: str, paksa: bool = False) -> dic
 
 
 @mcp.tool
+async def opm_tambah_responden(
+    ctx: Context,
+    sesi_id: str,
+    partisipan_id: str,
+    jabatan_label: str,
+    nama: str | None = None,
+) -> dict:
+    """Daftarkan satu responden OPM secara manual ke sesi (admin).
+
+    Sebagian besar anggota SME panel sudah otomatis jadi responden saat sesi
+    OPM dibuat (auto-populate) — tool ini untuk menambah anggota panel yang
+    bergabung SETELAH sesi dibuat. Partisipan wajib anggota SME panel jabatan
+    sesi ini; backend menolak (422) bila tidak.
+
+    Args:
+        sesi_id: UUID sesi OPM.
+        partisipan_id: UUID partisipan (wajib anggota SME panel jabatan sesi).
+        jabatan_label: Label jabatan responden (teks bebas).
+        nama: Nama responden (opsional).
+
+    Returns:
+        Data responden OPM yang baru dibuat termasuk ``id``.
+    """
+    body: dict = {"partisipan_id": partisipan_id, "jabatan_label": jabatan_label}
+    if nama is not None:
+        body["nama"] = nama
+    try:
+        return await backend_post(f"/api/v1/opm/sesi/{sesi_id}/responden", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_tambah_responden_banyak(
+    ctx: Context, sesi_id: str, partisipan_ids: list[str]
+) -> dict:
+    """Tugaskan (assign) banyak partisipan sekaligus sebagai responden OPM
+    (admin, idempoten).
+
+    Beda dari ``opm_tambah_responden`` (single, mewajibkan ``jabatan_label``
+    manual), tool ini meresolusi ``nama``/``jabatan_label`` otomatis dari data
+    partisipan & jabatan sesi. Partisipan yang bukan anggota SME panel jabatan
+    sesi ini dilewati (bukan ditolak seluruhnya) dengan alasan
+    ``bukan_anggota_sme_panel`` di ``skipped``.
+
+    Args:
+        sesi_id: UUID sesi OPM.
+        partisipan_ids: Daftar UUID partisipan (wajib anggota SME panel jabatan sesi).
+
+    Returns:
+        ``{"created": [...], "skipped": [{"partisipan_id": ..., "alasan": ...}]}``.
+        Alasan skip: ``sudah_terdaftar``, ``duplikat_input``,
+        ``bukan_anggota_sme_panel``, atau ``kapasitas_penuh``.
+    """
+    try:
+        return await backend_post(
+            f"/api/v1/opm/sesi/{sesi_id}/responden/bulk",
+            ctx=ctx,
+            body={"partisipan_ids": partisipan_ids},
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
 async def opm_hapus_responden(ctx: Context, responden_id: str) -> dict:
     """Hapus responden OPM berdasarkan ID.
 
@@ -2706,6 +2804,40 @@ async def buat_ts_penugasan(
         body["catatan"] = catatan
     try:
         return await backend_post("/api/v1/time-study/penugasan", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def buat_ts_penugasan_banyak(
+    ctx: Context,
+    partisipan_ids: list[str],
+    aktif: bool = True,
+    catatan: str | None = None,
+) -> dict:
+    """Tugaskan banyak partisipan sekaligus untuk mencatat Time Study (admin, idempoten).
+
+    Berbeda dari ``buat_ts_penugasan`` (satu partisipan per panggilan), tool ini
+    menugaskan seluruh ``partisipan_ids`` dalam satu panggilan. Bersifat
+    **idempoten** (skip-on-conflict), bukan atomik: partisipan yang sudah punya
+    penugasan atau duplikat dalam daftar akan dilewati dan dilaporkan di
+    ``skipped``, sisanya tetap ditugaskan.
+
+    Args:
+        partisipan_ids: Daftar UUID partisipan yang ditugaskan.
+        aktif: Status aktif penugasan, diterapkan ke seluruh baris (default True).
+        catatan: Catatan tambahan, diterapkan ke seluruh baris (opsional).
+
+    Returns:
+        ``{"created": [...], "skipped": [{"partisipan_id": ..., "alasan": ...}]}``.
+        Alasan skip: ``sudah_terdaftar`` (partisipan sudah punya penugasan TS)
+        atau ``duplikat_input`` (id berulang dalam daftar yang sama).
+    """
+    body: dict = {"partisipan_ids": partisipan_ids, "aktif": aktif}
+    if catatan is not None:
+        body["catatan"] = catatan
+    try:
+        return await backend_post("/api/v1/time-study/penugasan/bulk", ctx=ctx, body=body)
     except BackendError as exc:
         _raise_tool_error(exc)
 

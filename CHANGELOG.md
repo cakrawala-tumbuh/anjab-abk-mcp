@@ -6,6 +6,18 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Ditambahkan
+
+- **Tool bulk baru: `buat_ts_penugasan_banyak`, `ti_tambah_responden_banyak`,
+  `opm_tambah_responden`, `opm_tambah_responden_banyak`.** Meng-expose
+  endpoint bulk-assign idempoten baru di `anjab-abk-backend` (TS/TI/OPM) yang
+  ditambahkan bersamaan dengan auto-populate SME panel di TI. Tool manual
+  (single) yang sudah ada — `buat_ts_penugasan`, `ti_tambah_responden` — tidak
+  berubah sama sekali. `opm_tambah_responden` (single) juga baru — domain OPM
+  sebelumnya hanya punya tool hapus, meski endpoint backend-nya sudah lama
+  ada. Response bulk (`{created, skipped}`) diteruskan apa adanya dari
+  backend, tanpa transformasi tambahan di layer MCP.
+
 ## [0.12.0] - 2026-07-13
 
 ### Diperjelas
