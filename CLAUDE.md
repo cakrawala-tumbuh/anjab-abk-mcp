@@ -36,6 +36,7 @@ tests/
 
 ## Konvensi & Invariants
 
+- **DCS & WCP adalah instrumen singleton (tanpa sesi)** — satu deployment backend = satu studi. Tool-tool domain ini (`dcs_*`, `wcp_*`) TIDAK menerima/menghasilkan `sesi_id`; status instrumen mengalir `OPEN -> CLOSED -> ANALYZED` lewat `dcs_instrumen`/`wcp_instrumen` + `*_tutup_instrumen` + `*_buka_ulang_instrumen`. **TI (Task Inventory) dan OPM tetap memakai sesi** (`sesi_id` wajib) — desain produk sengaja berbeda antar domain, jangan disamakan.
 - **Docstring fungsi tool = deskripsi tool yang dibaca Claude** — wajib informatif, dikelola skill `docstring` (Google style).
 - `asgi.py` **wajib** membungkus MCP app dengan Starlette, menambah `/health`, dan mengoper `lifespan` ke Starlette — tanpa lifespan, setiap request MCP crash `RuntimeError: Task group is not initialized`.
 - `TokenError` hanya boleh memakai error_code valid OAuth/MCP: `invalid_request`, `invalid_client`, `invalid_grant`, `unauthorized_client`, `unsupported_grant_type`, `invalid_scope` — kode lain memicu ValidationError.

@@ -6,6 +6,58 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-13
+
+### Diperjelas
+
+- **Docstring tool TI & OPM: klarifikasi arti "sesi"** — docstring seluruh
+  tool `*_ti_sesi`/`ti_*`/`*_opm_sesi`/`opm_*` (mis. `buat_ti_sesi`,
+  `daftar_ti_sesi`, `detail_ti_sesi`, `cari_ti_sesi`, `perbarui_ti_sesi`,
+  `hapus_ti_sesi`, `ti_tambah_responden`, `ti_mulai_tahap1/2/3`,
+  `ti_task_terpilih`, `ti_analisis`, `ti_tutup_sesi`, `ti_hasil`,
+  `ti_daftar_responden`, `ti_detail_responden`, `ti_hapus_responden`,
+  `ti_seleksi_responden`, `ti_submit_seleksi`, `ti_tahap2_review`,
+  `ti_submit_tahap2`, `ti_daftar_detail`, `ti_submit_detail`,
+  `ti_kuesioner_saya`, `ti_catalog`, `ti_catalog_kombinasi`,
+  `ti_catalog_purge`, `ti_catalog_reseed`, `hapus_opm_sesi`,
+  `opm_hapus_responden`) diperkaya untuk menegaskan bahwa satu **"sesi" TI/OPM
+  adalah satu analisis untuk satu jabatan** — bukan sesi studi
+  multi-partisipan; satu studi ANJAB/ABK memiliki banyak sesi seperti itu,
+  satu per jabatan yang dianalisis. **Non-breaking**: nama tool, parameter,
+  dan endpoint yang dipanggil tidak berubah sama sekali — perubahan murni
+  teks docstring agar tidak menyesatkan pemanggil tool (Claude).
+
+### Changed (Breaking)
+
+- **DCS & WCP: sesi dihapus total, diganti instrumen singleton** — mengikuti
+  refactor `anjab-abk-backend` yang menghapus entitas sesi DCS/WCP (satu
+  deployment = satu studi, status `OPEN -> CLOSED -> ANALYZED`, tanpa
+  create/delete). Tool `sesi_id`/`wcp_sesi_id` DIHAPUS total dari domain DCS/WCP;
+  TI dan OPM **tidak berubah** (tetap memakai sesi).
+  - **Dihapus**: `daftar_dcs_sesi`, `buat_dcs_sesi`, `dcs_buka_sesi`,
+    `cari_dcs_sesi`, `hapus_dcs_sesi`, `daftar_wcp_sesi`, `buat_wcp_sesi`,
+    `wcp_buka_sesi`, `cari_wcp_sesi`, `hapus_wcp_sesi`.
+  - **Diganti nama** (mengikuti endpoint baru `/api/v1/{dcs,wcp}/instrumen`):
+    `detail_dcs_sesi` → `dcs_instrumen`, `perbarui_dcs_sesi` →
+    `dcs_perbarui_instrumen`, `dcs_tutup_sesi` → `dcs_tutup_instrumen` (idem
+    untuk WCP).
+  - **Baru**: `dcs_buka_ulang_instrumen`, `wcp_buka_ulang_instrumen`
+    (`POST /instrumen/buka-ulang`, transisi CLOSED → OPEN).
+  - **Signature berubah**: `dcs_tambah_responden`/`wcp_tambah_responden` kini
+    menerima `partisipan_ids: list[str]` (bulk-assign, minimal 1) menggantikan
+    `partisipan_id`/`nama` tunggal per sesi. `dcs_analisis`/`dcs_hasil`
+    (dan padanan WCP) tidak lagi menerima `sesi_id`/`wcp_sesi_id` — K-Index
+    gabungan DCS+WCP kini otomatis dihitung backend. `dcs_daftar_responden`/
+    `wcp_daftar_responden` tidak lagi menerima `sesi_id`.
+  - **Path diperbaiki** (tanpa perubahan nama/signature tool, path lama sudah
+    404 di backend baru): `dcs_detail_responden`, `dcs_hapus_responden`,
+    `dcs_submit_jawaban`, `dcs_daftar_jawaban`, `dcs_hasil_responden` dan
+    padanan WCP-nya — `/api/v1/{dcs,wcp}/sesi/responden/...` menjadi
+    `/api/v1/{dcs,wcp}/responden/...`.
+  - Docstring `dcs_kuesioner_saya`/`wcp_kuesioner_saya` diperbarui: field
+    respons `sesi_id`/`sesi_periode`/`sesi_catatan`/`sesi_status` sudah tidak
+    ada, diganti `instrumen_status` + `catatan`.
+
 ## [0.11.0] - 2026-07-12
 
 ### Ditambahkan

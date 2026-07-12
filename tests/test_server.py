@@ -31,8 +31,8 @@ async def test_tools_terdaftar():
     assert "daftar_partisipan" in names
     assert "daftar_sme_panel" in names
     assert "daftar_ti_sesi" in names
-    assert "daftar_dcs_sesi" in names
-    assert "daftar_wcp_sesi" in names
+    assert "dcs_instrumen" in names
+    assert "wcp_instrumen" in names
     assert "daftar_ts_penugasan" in names
 
 
@@ -98,21 +98,179 @@ async def test_ti_tambah_responden_tanpa_arg_raise():
 
 
 @pytest.mark.asyncio
-async def test_daftar_dcs_sesi():
-    payload = {"items": [], "total": 0}
-    with patch(_GET, new_callable=AsyncMock, return_value=payload):
+async def test_dcs_instrumen():
+    """DCS instrumen singleton — dipanggil tanpa argumen apa pun."""
+    payload = {"id": "dcs", "status": "OPEN", "min_responden": 5, "catatan": None}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
-            result = await client.call_tool("daftar_dcs_sesi", {})
-    assert result.data["total"] == 0
+            result = await client.call_tool("dcs_instrumen", {})
+    assert result.data["status"] == "OPEN"
+    assert m.await_args.args[0] == "/api/v1/dcs/instrumen"
 
 
 @pytest.mark.asyncio
-async def test_daftar_wcp_sesi():
-    payload = {"items": [], "total": 0}
-    with patch(_GET, new_callable=AsyncMock, return_value=payload):
+async def test_wcp_instrumen():
+    """WCP instrumen singleton — dipanggil tanpa argumen apa pun."""
+    payload = {"id": "wcp", "status": "OPEN", "min_responden": 5, "catatan": None}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
-            result = await client.call_tool("daftar_wcp_sesi", {})
-    assert result.data["total"] == 0
+            result = await client.call_tool("wcp_instrumen", {})
+    assert result.data["status"] == "OPEN"
+    assert m.await_args.args[0] == "/api/v1/wcp/instrumen"
+
+
+@pytest.mark.asyncio
+async def test_dcs_tambah_responden_bulk():
+    """dcs_tambah_responden menerima daftar partisipan_ids dan mengirimnya sebagai body."""
+    payload = [{"id": "drsp-1"}, {"id": "drsp-2"}]
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "dcs_tambah_responden", {"partisipan_ids": ["p1", "p2", "p3", "p4", "p5"]}
+            )
+    assert len(result.data) == 2
+    assert m.await_args.args[0] == "/api/v1/dcs/responden"
+    assert m.await_args.kwargs["body"] == {"partisipan_ids": ["p1", "p2", "p3", "p4", "p5"]}
+
+
+@pytest.mark.asyncio
+async def test_wcp_tambah_responden_bulk():
+    payload = [{"id": "wrsp-1"}]
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("wcp_tambah_responden", {"partisipan_ids": ["p1"]})
+    assert len(result.data) == 1
+    assert m.await_args.args[0] == "/api/v1/wcp/responden"
+    assert m.await_args.kwargs["body"] == {"partisipan_ids": ["p1"]}
+
+
+@pytest.mark.asyncio
+async def test_dcs_analisis_dan_hasil_tanpa_argumen():
+    """dcs_analisis & dcs_hasil tidak lagi menerima sesi_id/wcp_sesi_id."""
+    with patch(_POST, new_callable=AsyncMock, return_value={"k_index": 0.4}) as m_post:
+        async with Client(mcp) as client:
+            await client.call_tool("dcs_analisis", {})
+    assert m_post.await_args.args[0] == "/api/v1/dcs/analisis"
+
+    with patch(_GET, new_callable=AsyncMock, return_value={"k_index": 0.4}) as m_get:
+        async with Client(mcp) as client:
+            await client.call_tool("dcs_hasil", {})
+    assert m_get.await_args.args[0] == "/api/v1/dcs/hasil"
+
+
+@pytest.mark.asyncio
+async def test_wcp_analisis_dan_hasil_tanpa_argumen():
+    with patch(_POST, new_callable=AsyncMock, return_value={"n_responden": 3}) as m_post:
+        async with Client(mcp) as client:
+            await client.call_tool("wcp_analisis", {})
+    assert m_post.await_args.args[0] == "/api/v1/wcp/analisis"
+
+    with patch(_GET, new_callable=AsyncMock, return_value={"n_responden": 3}) as m_get:
+        async with Client(mcp) as client:
+            await client.call_tool("wcp_hasil", {})
+    assert m_get.await_args.args[0] == "/api/v1/wcp/hasil"
+
+
+@pytest.mark.asyncio
+async def test_dcs_perbarui_instrumen_hanya_field_terisi():
+    with patch(_PATCH, new_callable=AsyncMock, return_value={"id": "dcs"}) as m:
+        async with Client(mcp) as client:
+            await client.call_tool("dcs_perbarui_instrumen", {"catatan": "Studi 2026"})
+    assert m.await_args.args[0] == "/api/v1/dcs/instrumen"
+    assert m.await_args.kwargs["body"] == {"catatan": "Studi 2026"}
+
+
+@pytest.mark.asyncio
+async def test_dcs_tutup_dan_buka_ulang_instrumen():
+    with patch(_POST, new_callable=AsyncMock, return_value={"status": "CLOSED"}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("dcs_tutup_instrumen", {})
+    assert result.data["status"] == "CLOSED"
+    assert m.await_args.args[0] == "/api/v1/dcs/instrumen/tutup"
+
+    with patch(_POST, new_callable=AsyncMock, return_value={"status": "OPEN"}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("dcs_buka_ulang_instrumen", {})
+    assert result.data["status"] == "OPEN"
+    assert m.await_args.args[0] == "/api/v1/dcs/instrumen/buka-ulang"
+
+
+@pytest.mark.asyncio
+async def test_wcp_tutup_dan_buka_ulang_instrumen():
+    with patch(_POST, new_callable=AsyncMock, return_value={"status": "CLOSED"}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("wcp_tutup_instrumen", {})
+    assert result.data["status"] == "CLOSED"
+    assert m.await_args.args[0] == "/api/v1/wcp/instrumen/tutup"
+
+    with patch(_POST, new_callable=AsyncMock, return_value={"status": "OPEN"}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("wcp_buka_ulang_instrumen", {})
+    assert result.data["status"] == "OPEN"
+    assert m.await_args.args[0] == "/api/v1/wcp/instrumen/buka-ulang"
+
+
+@pytest.mark.asyncio
+async def test_dcs_daftar_responden_tanpa_argumen():
+    payload = [{"id": "drsp-1"}]
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("dcs_daftar_responden", {})
+    assert len(result.data) == 1
+    assert m.await_args.args[0] == "/api/v1/dcs/responden"
+
+
+@pytest.mark.asyncio
+async def test_wcp_daftar_responden_tanpa_argumen():
+    payload = [{"id": "wrsp-1"}]
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("wcp_daftar_responden", {})
+    assert len(result.data) == 1
+    assert m.await_args.args[0] == "/api/v1/wcp/responden"
+
+
+@pytest.mark.asyncio
+async def test_dcs_hasil_responden_path():
+    with patch(_GET, new_callable=AsyncMock, return_value={"responden_id": "r1"}) as m:
+        async with Client(mcp) as client:
+            await client.call_tool("dcs_hasil_responden", {"responden_id": "r1"})
+    assert m.await_args.args[0] == "/api/v1/dcs/hasil-responden/r1"
+
+
+@pytest.mark.asyncio
+async def test_wcp_hasil_responden_path():
+    with patch(_GET, new_callable=AsyncMock, return_value={"responden_id": "r1"}) as m:
+        async with Client(mcp) as client:
+            await client.call_tool("wcp_hasil_responden", {"responden_id": "r1"})
+    assert m.await_args.args[0] == "/api/v1/wcp/hasil-responden/r1"
+
+
+@pytest.mark.asyncio
+async def test_tidak_ada_tool_sesi_dcs_wcp():
+    """Guard: tool sesi DCS/WCP (dihapus) tidak boleh muncul kembali."""
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
+    names = {t.name for t in tools}
+    for nm in [
+        "daftar_dcs_sesi",
+        "buat_dcs_sesi",
+        "dcs_buka_sesi",
+        "dcs_tutup_sesi",
+        "detail_dcs_sesi",
+        "cari_dcs_sesi",
+        "perbarui_dcs_sesi",
+        "hapus_dcs_sesi",
+        "daftar_wcp_sesi",
+        "buat_wcp_sesi",
+        "wcp_buka_sesi",
+        "wcp_tutup_sesi",
+        "detail_wcp_sesi",
+        "cari_wcp_sesi",
+        "perbarui_wcp_sesi",
+        "hapus_wcp_sesi",
+    ]:
+        assert nm not in names, f"tool sesi {nm} seharusnya sudah dihapus"
 
 
 @pytest.mark.asyncio
@@ -180,13 +338,22 @@ async def test_hapus_opm_sesi():
 
 
 @pytest.mark.asyncio
-async def test_hapus_dcs_sesi_paksa_diteruskan():
+async def test_dcs_hapus_responden_tanpa_sesi():
+    """dcs_hapus_responden (instrumen singleton) tidak lagi butuh sesi_id."""
     with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
         async with Client(mcp) as client:
-            result = await client.call_tool("hapus_dcs_sesi", {"sesi_id": "dses-1", "paksa": True})
+            result = await client.call_tool("dcs_hapus_responden", {"responden_id": "r1"})
     assert result.data["ok"] is True
-    assert "/api/v1/dcs/sesi/dses-1" in m.await_args.args[0]
-    assert m.await_args.kwargs["params"] == {"paksa": True}
+    assert m.await_args.args[0] == "/api/v1/dcs/responden/r1"
+
+
+@pytest.mark.asyncio
+async def test_wcp_hapus_responden_tanpa_sesi():
+    with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("wcp_hapus_responden", {"responden_id": "r1"})
+    assert result.data["ok"] is True
+    assert m.await_args.args[0] == "/api/v1/wcp/responden/r1"
 
 
 @pytest.mark.asyncio
@@ -241,7 +408,24 @@ async def test_semua_endpoint_punya_tool():
         "ti_submit_seleksi",
         "ti_submit_tahap2",
         "ti_tutup_sesi",
+        # DCS/WCP — instrumen singleton (tanpa sesi)
+        "dcs_instrumen",
+        "dcs_perbarui_instrumen",
+        "dcs_tutup_instrumen",
+        "dcs_buka_ulang_instrumen",
+        "dcs_daftar_responden",
+        "dcs_tambah_responden",
+        "dcs_analisis",
+        "dcs_hasil",
         "dcs_submit_jawaban",
+        "wcp_instrumen",
+        "wcp_perbarui_instrumen",
+        "wcp_tutup_instrumen",
+        "wcp_buka_ulang_instrumen",
+        "wcp_daftar_responden",
+        "wcp_tambah_responden",
+        "wcp_analisis",
+        "wcp_hasil",
         "wcp_submit_jawaban",
         "ts_buat_log",
         "info_saya",
@@ -278,7 +462,7 @@ async def test_semua_endpoint_punya_tool():
         "ts_kuesioner_saya",
     ]:
         assert nm in names, f"tool {nm} tidak terdaftar"
-    assert len(names) >= 142
+    assert len(names) >= 134
 
 
 @pytest.mark.asyncio
@@ -336,8 +520,8 @@ async def test_dcs_submit_jawaban():
                 {"responden_id": "r1", "jawaban": jawaban_final},
             )
     assert m_put.await_args.kwargs["body"]["jawaban"][0]["item_id"] == "D1a"
-    assert m_put.await_args.args[0] == "/api/v1/dcs/sesi/responden/r1/jawaban"
-    assert m_post.await_args.args[0] == "/api/v1/dcs/sesi/responden/r1/jawaban/submit"
+    assert m_put.await_args.args[0] == "/api/v1/dcs/responden/r1/jawaban"
+    assert m_post.await_args.args[0] == "/api/v1/dcs/responden/r1/jawaban/submit"
     assert result.data == jawaban_final
 
 
@@ -353,8 +537,8 @@ async def test_wcp_submit_jawaban():
                 "wcp_submit_jawaban",
                 {"responden_id": "r1", "jawaban": jawaban_final},
             )
-    assert m_put.await_args.args[0] == "/api/v1/wcp/sesi/responden/r1/jawaban"
-    assert m_post.await_args.args[0] == "/api/v1/wcp/sesi/responden/r1/jawaban/submit"
+    assert m_put.await_args.args[0] == "/api/v1/wcp/responden/r1/jawaban"
+    assert m_post.await_args.args[0] == "/api/v1/wcp/responden/r1/jawaban/submit"
     assert result.data == jawaban_final
 
 

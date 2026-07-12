@@ -8,8 +8,8 @@ Server ini bertindak sebagai adapter antara Claude dan REST API [`anjab-abk-back
 
 - Tools untuk data inti: jenjang pendidikan, sekolah, jabatan, partisipan, SME panel
 - Tools untuk alat ukur **Task Inventory** (TI): sesi 3 tahap, responden, hasil
-- Tools untuk alat ukur **DCS** (Dimension Classification Survey)
-- Tools untuk alat ukur **WCP** (Work Characteristics Profile)
+- Tools untuk alat ukur **DCS** (Dimension Classification Survey): instrumen singleton (tanpa sesi) — satu deployment = satu studi
+- Tools untuk alat ukur **WCP** (Work Characteristics Profile): instrumen singleton (tanpa sesi) — satu deployment = satu studi
 - Tools untuk alat ukur **Time Study** (TS)
 - Auth via Authentik OAuth (Pola B) + API key statis
 - Mendukung stdio, Claude Code (remote), dan Claude Web (HTTP/SSE)
