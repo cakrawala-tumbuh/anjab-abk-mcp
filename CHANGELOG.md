@@ -6,6 +6,15 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Diverifikasi
+
+- **Backlog 004 (terminologi "Sesi" → "Analisis Jabatan" di TI/OPM): docstring tool
+  MCP sudah lengkap sejak commit sebelumnya.** Diaudit ulang seluruh docstring tool
+  `*_ti_sesi`/`ti_*`/`opm_*` yang menyebut "sesi" — semuanya sudah menjelaskan bahwa
+  **satu "sesi" TI/OPM = satu analisis untuk satu jabatan**, bukan sesi studi
+  multi-partisipan, dan satu studi punya banyak di antaranya (satu per jabatan).
+  Tidak ada perubahan kode; nama tool tetap tidak diubah.
+
 ### Ditambahkan
 
 - **Tool bulk baru: `buat_ts_penugasan_banyak`, `ti_tambah_responden_banyak`,
