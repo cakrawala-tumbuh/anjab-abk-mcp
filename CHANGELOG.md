@@ -6,6 +6,19 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-07-14
+
+### Diperbaiki
+
+- **Backlog 020 — `dcs_tambah_responden`/`wcp_tambah_responden`: kontrak selaras dengan
+  `BulkAssignResult` backend.** Backend (`anjab-abk-backend` backlog 018) mengubah response
+  `POST /api/v1/dcs/responden` & `POST /api/v1/wcp/responden` dari array menjadi objek
+  `{created, skipped}`. Kedua tool ini masih bertipe kembali `list` dan docstring-nya masih
+  menjanjikan "daftar responden yang baru dibuat" — diperbarui menjadi `dict` dengan docstring
+  yang menjelaskan bentuk `{"created": [...], "skipped": [{"partisipan_id", "alasan"}]}` dan
+  alasan skip yang benar (`duplikat_input`, `sudah_terdaftar`). Tidak ada perubahan perilaku
+  runtime (tool sudah meneruskan body backend apa adanya).
+
 ### Diverifikasi
 
 - **Backlog 004 (terminologi "Sesi" → "Analisis Jabatan" di TI/OPM): docstring tool

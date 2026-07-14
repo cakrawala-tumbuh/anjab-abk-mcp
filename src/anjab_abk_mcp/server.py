@@ -801,7 +801,7 @@ async def dcs_daftar_responden(ctx: Context) -> list:
 
 
 @mcp.tool
-async def dcs_tambah_responden(ctx: Context, partisipan_ids: list[str]) -> list:
+async def dcs_tambah_responden(ctx: Context, partisipan_ids: list[str]) -> dict:
     """Tugaskan (assign) partisipan sebagai responden DCS — bulk, tanpa sesi.
 
     DCS adalah instrumen singleton; partisipan langsung ditugaskan ke instrumen
@@ -812,7 +812,9 @@ async def dcs_tambah_responden(ctx: Context, partisipan_ids: list[str]) -> list:
             responden DCS (minimal 1, boleh banyak sekaligus).
 
     Returns:
-        Daftar responden DCS yang baru dibuat, masing-masing termasuk ``id``.
+        ``{"created": [...], "skipped": [{"partisipan_id": ..., "alasan": ...}]}``.
+        Alasan skip: ``duplikat_input`` (partisipan_id berulang di input) atau
+        ``sudah_terdaftar`` (sudah jadi responden DCS sebelumnya).
     """
     try:
         return await backend_post(
@@ -952,7 +954,7 @@ async def wcp_daftar_responden(ctx: Context) -> list:
 
 
 @mcp.tool
-async def wcp_tambah_responden(ctx: Context, partisipan_ids: list[str]) -> list:
+async def wcp_tambah_responden(ctx: Context, partisipan_ids: list[str]) -> dict:
     """Tugaskan (assign) partisipan sebagai responden WCP — bulk, tanpa sesi.
 
     WCP adalah instrumen singleton; partisipan langsung ditugaskan ke instrumen
@@ -963,7 +965,9 @@ async def wcp_tambah_responden(ctx: Context, partisipan_ids: list[str]) -> list:
             responden WCP (minimal 1, boleh banyak sekaligus).
 
     Returns:
-        Daftar responden WCP yang baru dibuat, masing-masing termasuk ``id``.
+        ``{"created": [...], "skipped": [{"partisipan_id": ..., "alasan": ...}]}``.
+        Alasan skip: ``duplikat_input`` (partisipan_id berulang di input) atau
+        ``sudah_terdaftar`` (sudah jadi responden WCP sebelumnya).
     """
     try:
         return await backend_post(

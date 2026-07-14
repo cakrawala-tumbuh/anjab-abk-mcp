@@ -140,24 +140,29 @@ async def test_wcp_instrumen():
 @pytest.mark.asyncio
 async def test_dcs_tambah_responden_bulk():
     """dcs_tambah_responden menerima daftar partisipan_ids dan mengirimnya sebagai body."""
-    payload = [{"id": "drsp-1"}, {"id": "drsp-2"}]
+    payload = {
+        "created": [{"id": "drsp-1"}, {"id": "drsp-2"}],
+        "skipped": [{"partisipan_id": "p5", "alasan": "sudah_terdaftar"}],
+    }
     with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "dcs_tambah_responden", {"partisipan_ids": ["p1", "p2", "p3", "p4", "p5"]}
             )
-    assert len(result.data) == 2
+    assert len(result.data["created"]) == 2
+    assert len(result.data["skipped"]) == 1
     assert m.await_args.args[0] == "/api/v1/dcs/responden"
     assert m.await_args.kwargs["body"] == {"partisipan_ids": ["p1", "p2", "p3", "p4", "p5"]}
 
 
 @pytest.mark.asyncio
 async def test_wcp_tambah_responden_bulk():
-    payload = [{"id": "wrsp-1"}]
+    payload = {"created": [{"id": "wrsp-1"}], "skipped": []}
     with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool("wcp_tambah_responden", {"partisipan_ids": ["p1"]})
-    assert len(result.data) == 1
+    assert len(result.data["created"]) == 1
+    assert result.data["skipped"] == []
     assert m.await_args.args[0] == "/api/v1/wcp/responden"
     assert m.await_args.kwargs["body"] == {"partisipan_ids": ["p1"]}
 
