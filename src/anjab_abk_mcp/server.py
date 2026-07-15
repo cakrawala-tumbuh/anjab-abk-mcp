@@ -13,13 +13,14 @@ Tools dikelompokkan per domain:
   - task_inventory: sesi TI (3 tahap), responden, hasil
   - dcs:            instrumen DCS singleton (tanpa sesi), responden, hasil
   - wcp:            instrumen WCP singleton (tanpa sesi), responden, hasil
-  - opm:            sesi OPM (tambah responden single+bulk, hapus responden & sesi)
+  - opm:            sesi OPM (CRUD sesi, buka/tutup, task, responden, jawaban, analisis, hasil)
   - time_study:     penugasan TS per partisipan, log harian, kuesioner
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
@@ -386,9 +387,8 @@ async def daftar_ti_sesi(
     memiliki banyak sesi TI, satu per jabatan yang dikaji.
 
     Sesi TI memiliki alur 3 tahap: DRAFT → TAHAP1 → TAHAP2 → TAHAP3 →
-    CLOSED → ANALYZED. Setiap sesi mencakup kategori jabatan dan periode studi.
-    Field ``unit`` bersifat opsional — sesi lintas-unit tidak memiliki unit kerja
-    spesifik.
+    CLOSED → ANALYZED. Setiap sesi terikat pada satu jabatan dan satu
+    ``cabang`` lokasi (``"Bandung"`` atau ``"Semarang"``).
 
     Args:
         limit: Jumlah item per halaman (maks 100, default 20).
@@ -405,7 +405,7 @@ async def daftar_ti_sesi(
 
 @mcp.tool
 async def detail_ti_sesi(ctx: Context, sesi_id: str) -> dict:
-    """Ambil detail sesi Task Inventory termasuk status, unit, kategori, dan koordinator.
+    """Ambil detail sesi Task Inventory termasuk status, cabang, jabatan, dan koordinator.
 
     Ingat: satu sesi TI = satu analisis untuk satu jabatan (bukan sesi studi
     multi-partisipan). Untuk melihat jabatan lain dalam studi yang sama, lihat
@@ -427,8 +427,7 @@ async def detail_ti_sesi(ctx: Context, sesi_id: str) -> dict:
 async def buat_ti_sesi(
     ctx: Context,
     jabatan_id: str,
-    periode: str,
-    unit: str | None = None,
+    cabang: Literal["Bandung", "Semarang"],
     koordinator_id: str | None = None,
     catatan: str | None = None,
 ) -> dict:
@@ -442,9 +441,8 @@ async def buat_ti_sesi(
     Args:
         jabatan_id: ID jabatan yang dikaji (FK ke Jabatan). Gunakan
             ``ti_catalog_kombinasi`` untuk melihat jabatan_id yang tersedia.
-        periode: Periode kajian format ``YYYY-MM``, mis. ``2026-06``.
-        unit: Unit/jenjang yang dikaji (TK/SD/SMP/SMA). Opsional —
-            bila tidak diisi, sesi berlaku lintas unit.
+        cabang: Cabang lokasi kajian — salah satu dari ``"Bandung"`` atau
+            ``"Semarang"`` (wajib).
         koordinator_id: UUID partisipan yang menjadi koordinator SME panel
             (reviewer Tahap 2). Opsional saat buat, wajib saat mulai Tahap 2.
         catatan: Catatan tambahan untuk sesi ini (opsional).
@@ -452,9 +450,7 @@ async def buat_ti_sesi(
     Returns:
         Data sesi TI yang baru dibuat termasuk ``id`` (UUID).
     """
-    body: dict = {"jabatan_id": jabatan_id, "periode": periode}
-    if unit is not None:
-        body["unit"] = unit
+    body: dict = {"jabatan_id": jabatan_id, "cabang": cabang}
     if koordinator_id is not None:
         body["koordinator_id"] = koordinator_id
     if catatan is not None:
@@ -528,8 +524,10 @@ async def ti_tambah_responden_banyak(ctx: Context, sesi_id: str, partisipan_ids:
 
     Returns:
         ``{"created": [...], "skipped": [{"partisipan_id": ..., "alasan": ...}]}``.
-        Alasan skip: ``sudah_terdaftar``, ``duplikat_input``,
-        ``bukan_anggota_sme_panel``, atau ``kapasitas_penuh``.
+        Alasan skip: ``sudah_terdaftar``, ``duplikat_input``, atau
+        ``bukan_anggota_sme_panel``. Cap jumlah responden TI sudah dihapus
+        (backlog 037) — SELURUH anggota panel selalu diproses tanpa batas atas,
+        sehingga alasan ``kapasitas_penuh`` tidak mungkin muncul untuk TI.
     """
     try:
         return await backend_post(
@@ -788,6 +786,30 @@ async def dcs_buka_ulang_instrumen(ctx: Context) -> dict:
 
 
 @mcp.tool
+async def dcs_reset_instrumen(ctx: Context) -> dict:
+    """Reset instrumen DCS — singleton, tanpa sesi. **DESTRUKTIF & TIDAK BISA DIBATALKAN.**
+
+    Dalam satu transaksi: menghapus SELURUH responden DCS beserta jawabannya
+    (CASCADE), lalu mengembalikan status ke ``OPEN`` (``closed_at`` di-set
+    ``NULL``). Satu-satunya jalan resmi keluar dari status ``ANALYZED``
+    (terminal) — dipakai saat data yang sudah dianalisis ternyata data uji
+    coba/keliru dan instrumen perlu dibuka ulang untuk pengumpulan data yang
+    benar. Sah dipanggil dari status apa pun (OPEN/CLOSED/ANALYZED), idempoten.
+
+    Berbeda dari ``dcs_buka_ulang_instrumen`` yang non-destruktif (hanya
+    ``CLOSED → OPEN`` tanpa menghapus data): tool ini **membuang semua data
+    responden**. **Hanya dapat dijalankan oleh admin.**
+
+    Returns:
+        Data instrumen DCS yang sudah diperbarui dengan status ``OPEN``.
+    """
+    try:
+        return await backend_post("/api/v1/dcs/instrumen/reset", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
 async def dcs_daftar_responden(ctx: Context) -> list:
     """Ambil daftar seluruh responden DCS (admin) — instrumen singleton, tanpa sesi.
 
@@ -936,6 +958,30 @@ async def wcp_buka_ulang_instrumen(ctx: Context) -> dict:
     """
     try:
         return await backend_post("/api/v1/wcp/instrumen/buka-ulang", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def wcp_reset_instrumen(ctx: Context) -> dict:
+    """Reset instrumen WCP — singleton, tanpa sesi. **DESTRUKTIF & TIDAK BISA DIBATALKAN.**
+
+    Dalam satu transaksi: menghapus SELURUH responden WCP beserta jawabannya
+    (CASCADE), lalu mengembalikan status ke ``OPEN`` (``closed_at`` di-set
+    ``NULL``). Satu-satunya jalan resmi keluar dari status ``ANALYZED``
+    (terminal) — dipakai saat data yang sudah dianalisis ternyata data uji
+    coba/keliru dan instrumen perlu dibuka ulang untuk pengumpulan data yang
+    benar. Sah dipanggil dari status apa pun (OPEN/CLOSED/ANALYZED), idempoten.
+
+    Berbeda dari ``wcp_buka_ulang_instrumen`` yang non-destruktif (hanya
+    ``CLOSED → OPEN`` tanpa menghapus data): tool ini **membuang semua data
+    responden**. **Hanya dapat dijalankan oleh admin.**
+
+    Returns:
+        Data instrumen WCP yang sudah diperbarui dengan status ``OPEN``.
+    """
+    try:
+        return await backend_post("/api/v1/wcp/instrumen/reset", ctx=ctx)
     except BackendError as exc:
         _raise_tool_error(exc)
 
@@ -1394,6 +1440,29 @@ async def detail_partisipan(ctx: Context, partisipan_id: str) -> dict:
 
 
 @mcp.tool
+async def partisipan_saya(ctx: Context) -> dict:
+    """Ambil data partisipan pemanggil berdasarkan token Bearer saat ini.
+
+    Mengembalikan record ``Partisipan`` (nama, jabatan, sekolah, dll.) yang
+    terhubung ke pengguna terautentikasi — memetakan ``sub`` token ke
+    partisipan di backend. Backend membalas 404 bila token sah tetapi tidak
+    terkait partisipan mana pun.
+
+    Berbeda dari ``info_saya`` (``GET /me``, principal sistem — identitas &
+    peran login mentah): tool ini mengembalikan entitas domain ``Partisipan``.
+    Gunakan ``partisipan_saya`` bila butuh ``id`` partisipan untuk alur
+    kuesioner/responden; gunakan ``info_saya`` bila hanya perlu identitas login.
+
+    Returns:
+        Data partisipan pemanggil termasuk ``id`` (UUID).
+    """
+    try:
+        return await backend_get("/api/v1/partisipan/saya", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
 async def perbarui_partisipan(
     ctx: Context,
     partisipan_id: str,
@@ -1810,7 +1879,7 @@ async def cari_ti_sesi(
 
     Ingat: tiap hasil adalah satu sesi TI = satu analisis untuk satu jabatan.
     Untuk melihat semua jabatan yang dianalisis dalam satu studi, cari tanpa
-    filter jabatan/periode atau filter berdasarkan ``periode`` studi.
+    filter atau filter berdasarkan ``cabang``/``jabatan_id``.
 
     Args:
         domain: Kriteria pencarian, mis. ``[["status", "=", "DRAFT"]]``.
@@ -1832,40 +1901,34 @@ async def cari_ti_sesi(
 async def perbarui_ti_sesi(
     ctx: Context,
     sesi_id: str,
-    periode: str | None = None,
+    cabang: Literal["Bandung", "Semarang"] | None = None,
     koordinator_id: str | None = None,
-    min_responden: int | None = None,
-    max_responden: int | None = None,
     catatan: str | None = None,
 ) -> dict:
-    """Perbarui sebagian field sesi Task Inventory.
+    """Perbarui sebagian field sesi Task Inventory (hanya saat status DRAFT).
 
     ``sesi_id`` mengidentifikasi satu sesi TI = satu analisis untuk satu
     jabatan; perubahan di sini hanya berlaku untuk sesi (jabatan) tersebut.
+    Hanya field yang diisi (non-None) yang dikirim.
 
     Args:
         sesi_id: UUID sesi TI.
-        periode: Periode baru (opsional).
+        cabang: Cabang lokasi kajian baru — ``"Bandung"`` atau ``"Semarang"``
+            (opsional).
         koordinator_id: UUID koordinator SME panel (opsional). Kirim ``"HAPUS"``
             untuk menghapus koordinator yang ada.
-        min_responden: Minimal responden (opsional).
-        max_responden: Maksimal responden (opsional).
         catatan: Catatan baru (opsional).
 
     Returns:
         Data sesi TI setelah diperbarui.
     """
     body: dict = {}
-    if periode is not None:
-        body["periode"] = periode
+    if cabang is not None:
+        body["cabang"] = cabang
     if koordinator_id == "HAPUS":
         body["koordinator_id"] = None
     elif koordinator_id is not None:
         body["koordinator_id"] = koordinator_id
-    if min_responden is not None:
-        body["min_responden"] = min_responden
-    if max_responden is not None:
-        body["max_responden"] = max_responden
     if catatan is not None:
         body["catatan"] = catatan
     try:
@@ -2636,6 +2699,366 @@ async def wcp_hasil_responden(ctx: Context, responden_id: str) -> dict:
 #
 # OPM menilai prioritas task (Importance/Frequency/Criticality) berbasis snapshot
 # task hasil sesi Task Inventory yang sudah frozen (lihat ti_task_terpilih).
+#
+# Berbeda dari DCS/WCP (instrumen singleton tanpa sesi), OPM tetap memakai sesi
+# (`sesi_id`) seperti TI — satu sesi OPM = satu analisis prioritas untuk satu
+# jabatan. OPM juga tetap memakai `periode`/`min_responden`/`max_responden`
+# (TI membuangnya di backlog 037; OPM sengaja tidak ikut).
+
+
+@mcp.tool
+async def daftar_opm_sesi(ctx: Context, limit: int = 50, offset: int = 0) -> dict:
+    """Ambil daftar sesi OPM (Overall Priority Matrix) yang ada dalam sistem.
+
+    Satu "sesi" OPM adalah satu analisis prioritas task untuk **satu jabatan**
+    — bukan sesi studi multi-partisipan. Satu studi ANJAB/ABK biasanya memiliki
+    banyak sesi OPM, satu per jabatan yang dikaji.
+
+    Alur status sesi OPM: DRAFT → OPEN → CLOSED → ANALYZED. Tiap sesi OPM
+    dibangun dari snapshot task sesi Task Inventory yang sudah frozen.
+
+    Args:
+        limit: Jumlah item per halaman (default 50).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict dengan keys ``items`` (list sesi OPM) dan ``total`` (total record).
+    """
+    try:
+        return await backend_get("/api/v1/opm/sesi", ctx=ctx, limit=limit, offset=offset)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def buat_opm_sesi(
+    ctx: Context,
+    jabatan_id: str,
+    ti_sesi_id: str,
+    periode: str,
+    min_responden: int | None = None,
+    max_responden: int | None = None,
+    catatan: str | None = None,
+) -> dict:
+    """Buat sesi OPM baru dari snapshot task sesi Task Inventory (status awal: DRAFT).
+
+    Satu sesi OPM mencakup analisis prioritas task untuk satu jabatan
+    (``jabatan_id``), memakai snapshot task dari sesi TI (``ti_sesi_id``) yang
+    task-nya sudah frozen (Tahap 3 selesai). Untuk menganalisis banyak jabatan,
+    buat satu sesi OPM terpisah per jabatan.
+
+    Args:
+        jabatan_id: ID jabatan yang dinilai (FK ke Jabatan; wajib punya SME panel).
+        ti_sesi_id: UUID sesi Task Inventory sumber snapshot task (harus sudah
+            frozen).
+        periode: Periode survei format ``YYYY-MM``, mis. ``2026-06``.
+        min_responden: Jumlah minimum responden (opsional, default backend 3).
+        max_responden: Jumlah maksimum responden (opsional, default backend 10).
+        catatan: Catatan tambahan untuk sesi ini (opsional).
+
+    Returns:
+        Data sesi OPM yang baru dibuat termasuk ``id`` (UUID).
+    """
+    body: dict = {"jabatan_id": jabatan_id, "ti_sesi_id": ti_sesi_id, "periode": periode}
+    for key, value in (
+        ("min_responden", min_responden),
+        ("max_responden", max_responden),
+        ("catatan", catatan),
+    ):
+        if value is not None:
+            body[key] = value
+    try:
+        return await backend_post("/api/v1/opm/sesi", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def cari_opm_sesi(
+    ctx: Context,
+    domain: list | None = None,
+    order: list | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Cari sesi OPM dengan domain bergaya Odoo.
+
+    Ingat: tiap hasil adalah satu sesi OPM = satu analisis prioritas untuk satu
+    jabatan.
+
+    Args:
+        domain: Kriteria pencarian, mis. ``[["status", "=", "OPEN"]]``.
+        order: Urutan hasil.
+        limit: Jumlah item per halaman (default 50).
+        offset: Item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``items`` + ``total`` hasil pencarian.
+    """
+    body = {"domain": domain or [], "order": order or [], "limit": limit, "offset": offset}
+    try:
+        return await backend_post("/api/v1/opm/sesi/search", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def detail_opm_sesi(ctx: Context, sesi_id: str) -> dict:
+    """Ambil detail satu sesi OPM termasuk status, jabatan, dan periode.
+
+    Satu sesi OPM = satu analisis prioritas untuk satu jabatan (bukan sesi
+    studi multi-partisipan).
+
+    Args:
+        sesi_id: UUID sesi OPM (dari ``daftar_opm_sesi``).
+
+    Returns:
+        Detail sesi OPM termasuk status saat ini dan metadata studi.
+    """
+    try:
+        return await backend_get(f"/api/v1/opm/sesi/{sesi_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def perbarui_opm_sesi(
+    ctx: Context,
+    sesi_id: str,
+    periode: str | None = None,
+    min_responden: int | None = None,
+    max_responden: int | None = None,
+    catatan: str | None = None,
+) -> dict:
+    """Perbarui sebagian field sesi OPM (hanya saat status DRAFT).
+
+    ``jabatan_id`` dan ``ti_sesi_id`` tidak dapat diubah — ganti sumber berarti
+    hapus sesi lalu buat ulang. Hanya field yang diisi (non-None) yang dikirim.
+
+    Args:
+        sesi_id: UUID sesi OPM.
+        periode: Periode baru format ``YYYY-MM`` (opsional).
+        min_responden: Minimal responden baru (opsional).
+        max_responden: Maksimal responden baru (opsional).
+        catatan: Catatan baru (opsional).
+
+    Returns:
+        Data sesi OPM setelah diperbarui.
+    """
+    body: dict = {}
+    for key, value in (
+        ("periode", periode),
+        ("min_responden", min_responden),
+        ("max_responden", max_responden),
+        ("catatan", catatan),
+    ):
+        if value is not None:
+            body[key] = value
+    try:
+        return await backend_patch(f"/api/v1/opm/sesi/{sesi_id}", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_buka_sesi(ctx: Context, sesi_id: str) -> dict:
+    """Buka sesi OPM untuk pengisian (transisi DRAFT → OPEN).
+
+    Setelah dibuka, responden dapat mengisi rating Importance/Frequency/
+    Criticality via ``opm_kuesioner_saya`` / ``opm_submit_jawaban``.
+
+    Args:
+        sesi_id: UUID sesi OPM.
+
+    Returns:
+        Data sesi OPM dengan status ``OPEN``.
+    """
+    try:
+        return await backend_post(f"/api/v1/opm/sesi/{sesi_id}/buka", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_tutup_sesi(ctx: Context, sesi_id: str) -> dict:
+    """Tutup sesi OPM (transisi OPEN → CLOSED).
+
+    Menutup pengisian; setelah ini sesi siap dianalisis (``opm_analisis``).
+    Menutup hanya sesi (jabatan) ini — sesi OPM lain harus ditutup terpisah.
+
+    Args:
+        sesi_id: UUID sesi OPM.
+
+    Returns:
+        Data sesi OPM dengan status ``CLOSED``.
+    """
+    try:
+        return await backend_post(f"/api/v1/opm/sesi/{sesi_id}/tutup", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_daftar_task(ctx: Context, sesi_id: str) -> list:
+    """Ambil snapshot task sesi OPM (daftar task yang dinilai prioritasnya).
+
+    Task ini adalah salinan (frozen) dari task terpilih sesi Task Inventory
+    sumber saat sesi OPM dibuat. Diakses admin atau responden sesi ini.
+
+    Args:
+        sesi_id: UUID sesi OPM.
+
+    Returns:
+        Daftar task snapshot (kode + uraian) untuk sesi ini.
+    """
+    try:
+        return await backend_get(f"/api/v1/opm/sesi/{sesi_id}/task", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_daftar_responden(ctx: Context, sesi_id: str) -> list:
+    """Ambil daftar responden pada sebuah sesi OPM.
+
+    Responden di sini adalah anggota SME panel untuk jabatan yang dinilai sesi
+    ini (satu sesi OPM = satu jabatan), bukan seluruh partisipan studi.
+
+    Args:
+        sesi_id: UUID sesi OPM.
+
+    Returns:
+        Daftar responden sesi.
+    """
+    try:
+        return await backend_get(f"/api/v1/opm/sesi/{sesi_id}/responden", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_detail_responden(ctx: Context, responden_id: str) -> dict:
+    """Ambil detail satu responden OPM.
+
+    Responden terikat ke satu sesi OPM (satu analisis untuk satu jabatan).
+    Diakses admin atau pemilik responden itu sendiri.
+
+    Args:
+        responden_id: UUID responden OPM.
+
+    Returns:
+        Data responden termasuk status submit jawaban.
+    """
+    try:
+        return await backend_get(f"/api/v1/opm/sesi/responden/{responden_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_submit_jawaban(ctx: Context, responden_id: str, jawaban: list[dict]) -> dict | list:
+    """Submit jawaban OPM (rating prioritas task) untuk seorang responden.
+
+    Menyimpan seluruh jawaban sebagai draft (``PUT .../jawaban``) lalu langsung
+    memfinalisasi (``POST .../jawaban/submit``) — dua langkah backend dalam satu
+    panggilan tool. Finalisasi menuntut set ``task_kode`` lengkap sesuai
+    snapshot task sesi (lihat ``opm_daftar_task``).
+
+    Args:
+        responden_id: UUID responden OPM.
+        jawaban: Daftar rating per task, tiap item
+            ``{"task_kode": str, "importance": int, "frequency": int,
+            "criticality": int, "catatan": str | None}`` — importance/frequency/
+            criticality skala 1–5, ``catatan`` opsional.
+
+    Returns:
+        Daftar jawaban tersimpan setelah finalisasi.
+    """
+    try:
+        await backend_put(
+            f"/api/v1/opm/sesi/responden/{responden_id}/jawaban",
+            ctx=ctx,
+            body={"jawaban": jawaban},
+        )
+        return await backend_post(
+            f"/api/v1/opm/sesi/responden/{responden_id}/jawaban/submit",
+            ctx=ctx,
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_daftar_jawaban(ctx: Context, responden_id: str) -> list:
+    """Ambil jawaban OPM yang sudah diisi seorang responden.
+
+    Args:
+        responden_id: UUID responden OPM.
+
+    Returns:
+        Daftar jawaban (rating Importance/Frequency/Criticality per task).
+    """
+    try:
+        return await backend_get(f"/api/v1/opm/sesi/responden/{responden_id}/jawaban", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_analisis(ctx: Context, sesi_id: str) -> dict:
+    """Jalankan analisis OPM untuk sesi yang sudah ditutup (transisi ke ANALYZED).
+
+    Mengagregasi rating Importance/Frequency/Criticality seluruh responden
+    menjadi skor prioritas per task + badge (Selection/Workload Essential).
+    Tersedia setelah sesi berstatus CLOSED. Hasil ini spesifik untuk satu
+    jabatan (satu sesi OPM).
+
+    Args:
+        sesi_id: UUID sesi OPM.
+
+    Returns:
+        Hasil analisis prioritas task untuk sesi ini.
+    """
+    try:
+        return await backend_post(f"/api/v1/opm/sesi/{sesi_id}/analisis", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_hasil(ctx: Context, sesi_id: str) -> dict:
+    """Ambil hasil final OPM sesi yang sudah dianalisis.
+
+    Hasil ini spesifik untuk satu jabatan (satu sesi OPM). Untuk membandingkan
+    beberapa jabatan dalam studi yang sama, panggil ``opm_hasil`` per sesi.
+
+    Args:
+        sesi_id: UUID sesi OPM.
+
+    Returns:
+        Hasil final OPM termasuk skor prioritas per task dan interpretasinya.
+    """
+    try:
+        return await backend_get(f"/api/v1/opm/sesi/{sesi_id}/hasil", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_kuesioner_saya(ctx: Context) -> list:
+    """Ambil daftar kuesioner OPM yang di-assign ke saya (responden).
+
+    Seorang partisipan bisa terdaftar sebagai responden di lebih dari satu
+    sesi OPM sekaligus (dinilai untuk beberapa jabatan) — hasil di sini bisa
+    mencakup penugasan dari beberapa sesi OPM (jabatan) berbeda.
+
+    Returns:
+        Daftar penugasan OPM milik pengguna terautentikasi.
+    """
+    try:
+        return await backend_get("/api/v1/opm/kuesioner/saya", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
 
 
 @mcp.tool

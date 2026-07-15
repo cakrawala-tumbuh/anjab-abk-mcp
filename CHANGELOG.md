@@ -6,6 +6,62 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-07-15
+
+> Catatan: `src/anjab_abk_mcp/__init__.py` tertinggal di `0.12.0` sejak rilis
+> `0.13.0`/`0.13.1` (tag & CHANGELOG sudah maju, `__version__` tidak ikut
+> dinaikkan). Rilis ini sekaligus mengoreksinya ke `0.14.0`.
+
+### Ditambahkan
+
+- **Backlog 048 — domain OPM lengkap di MCP (15 tool baru) + `partisipan_saya`.**
+  Audit menemukan hanya 4 dari 20 endpoint OPM yang terekspos; seluruh alur OPM
+  (CRUD sesi, buka/tutup, snapshot task, responden, jawaban, analisis, hasil,
+  kuesioner partisipan) kini bisa dijalankan lewat MCP — setara TI/DCS/WCP.
+  Tool baru: `daftar_opm_sesi`, `buat_opm_sesi`, `cari_opm_sesi`,
+  `detail_opm_sesi`, `perbarui_opm_sesi`, `opm_buka_sesi`, `opm_tutup_sesi`,
+  `opm_daftar_task`, `opm_daftar_responden`, `opm_detail_responden`,
+  `opm_submit_jawaban` (PUT `.../jawaban` lalu POST `.../jawaban/submit`),
+  `opm_daftar_jawaban`, `opm_analisis`, `opm_hasil`, `opm_kuesioner_saya`. Plus
+  `partisipan_saya` (`GET /partisipan/saya`) — data partisipan pemanggil
+  berdasarkan token Bearer, berbeda dari `info_saya` (`/me`, principal sistem).
+  OPM tetap ber-`sesi_id` dan memakai `periode`/`min_responden`/`max_responden`
+  (tidak ikut perubahan `cabang` TI). Total tool 140 → 158.
+- **Backlog 047 — `dcs_reset_instrumen` & `wcp_reset_instrumen`.** Mengekspos
+  endpoint admin `POST /api/v1/{dcs,wcp}/instrumen/reset` (backend 043): dalam
+  satu transaksi menghapus SELURUH responden + jawaban (CASCADE) lalu status →
+  `OPEN` — satu-satunya jalan resmi keluar dari `ANALYZED` (terminal). Docstring
+  eksplisit menyatakan sifat destruktif; **`*_buka_ulang_instrumen` tidak diubah**
+  (tetap non-destruktif `CLOSED→OPEN`).
+
+### Diubah
+
+- **Backlog 045 — `buat_ti_sesi`: parameter `periode` → `cabang` (breaking).**
+  Menyusul backend 037 (v0.35.0) yang mengganti `TiSesiCreate.periode` (string
+  `YYYY-MM`) dengan `cabang` (enum `"Bandung"|"Semarang"`, wajib) dan
+  `extra="forbid"`. Parameter `periode` lama akan memicu 422; tool kini mengirim
+  `cabang`. Nilai `cabang` divalidasi sebagai `Literal["Bandung","Semarang"]`
+  (nilai lain ditolak sebelum mencapai backend).
+- **`perbarui_ti_sesi`: `periode` → `cabang`, hapus `min_responden`/`max_responden`
+  (temuan tambahan backlog 045).** Tidak disebut di file backlog, tetapi kelas
+  breakage yang sama: `TiSesiUpdate` backend (037) kini hanya menerima
+  `cabang`/`koordinator_id`/`catatan` (`extra="forbid"`) — param lama memicu 422.
+  Docstring `daftar_ti_sesi`/`detail_ti_sesi`/`cari_ti_sesi` yang masih menyebut
+  `unit`/`periode` ikut dirapikan (referensi field yang sudah tiada).
+- **Docstring `ti_tambah_responden_banyak`: hapus alasan skip `kapasitas_penuh`.**
+  Cap responden TI dicabut total di backend 037 — seluruh anggota panel selalu
+  diproses tanpa batas atas, sehingga `kapasitas_penuh` tidak mungkin muncul untuk
+  TI (masih relevan untuk OPM).
+
+### Dihapus
+
+- **`buat_ti_sesi`: parameter `unit` (temuan tambahan backlog 045).** Field `unit`
+  sudah dihapus dari `TiSesiCreate` backend sejak revisi `[2026-06-25]`; dengan
+  `extra="forbid"`, memasoknya selalu memicu 422 — parameter (dan docstring-nya
+  yang menyesatkan) sudah mati sejak lama. Dibuang sekalian karena verifikasi
+  kode menegaskan ia benar-benar rusak, bukan sekadar usang. Konsisten dengan
+  eskalasi yang diizinkan di file backlog 045.
+
 ## [0.13.1] - 2026-07-14
 
 ### Diperbaiki

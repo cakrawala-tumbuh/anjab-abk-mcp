@@ -38,6 +38,10 @@ async def test_tools_terdaftar():
     assert "ti_tambah_responden_banyak" in names
     assert "opm_tambah_responden" in names
     assert "opm_tambah_responden_banyak" in names
+    assert "buat_opm_sesi" in names
+    assert "opm_submit_jawaban" in names
+    assert "dcs_reset_instrumen" in names
+    assert "partisipan_saya" in names
 
 
 @pytest.mark.asyncio
@@ -82,15 +86,44 @@ async def test_daftar_ti_sesi():
 
 @pytest.mark.asyncio
 async def test_buat_ti_sesi():
-    payload = {"id": "uuid-ti-baru", "unit": "SMP", "status": "DRAFT"}
+    payload = {"id": "uuid-ti-baru", "cabang": "Bandung", "status": "DRAFT"}
     with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool(
                 "buat_ti_sesi",
-                {"jabatan_id": "jbt_a1b2", "periode": "2026-06", "unit": "SMP"},
+                {"jabatan_id": "jbt_a1b2", "cabang": "Bandung"},
             )
     assert result.data["id"] == "uuid-ti-baru"
-    assert m.await_args.kwargs["body"]["jabatan_id"] == "jbt_a1b2"
+    assert m.await_args.args[0] == "/api/v1/task-inventory/sesi"
+    assert m.await_args.kwargs["body"] == {"jabatan_id": "jbt_a1b2", "cabang": "Bandung"}
+
+
+@pytest.mark.asyncio
+async def test_buat_ti_sesi_cabang_invalid_ditolak():
+    """cabang di luar {Bandung, Semarang} ditolak validasi input (Literal) — tak
+    pernah sampai ke backend; tool melempar error yang jelas, bukan crash."""
+    with patch(_POST, new_callable=AsyncMock) as m:
+        async with Client(mcp) as client:
+            with pytest.raises(Exception):
+                await client.call_tool(
+                    "buat_ti_sesi",
+                    {"jabatan_id": "jbt_a1b2", "cabang": "Jakarta"},
+                )
+    m.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_perbarui_ti_sesi_cabang():
+    """perbarui_ti_sesi kirim cabang (bukan periode/min/max yang sudah dibuang 037)."""
+    payload = {"id": "tises-1", "cabang": "Semarang"}
+    with patch(_PATCH, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "perbarui_ti_sesi", {"sesi_id": "tises-1", "cabang": "Semarang"}
+            )
+    assert result.data["cabang"] == "Semarang"
+    assert m.await_args.args[0] == "/api/v1/task-inventory/sesi/tises-1"
+    assert m.await_args.kwargs["body"] == {"cabang": "Semarang"}
 
 
 @pytest.mark.asyncio
@@ -231,6 +264,26 @@ async def test_wcp_tutup_dan_buka_ulang_instrumen():
             result = await client.call_tool("wcp_buka_ulang_instrumen", {})
     assert result.data["status"] == "OPEN"
     assert m.await_args.args[0] == "/api/v1/wcp/instrumen/buka-ulang"
+
+
+@pytest.mark.asyncio
+async def test_dcs_reset_instrumen():
+    """Reset destruktif DCS: hapus semua responden, status → OPEN."""
+    with patch(_POST, new_callable=AsyncMock, return_value={"status": "OPEN"}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("dcs_reset_instrumen", {})
+    assert result.data["status"] == "OPEN"
+    assert m.await_args.args[0] == "/api/v1/dcs/instrumen/reset"
+
+
+@pytest.mark.asyncio
+async def test_wcp_reset_instrumen():
+    """Reset destruktif WCP: hapus semua responden, status → OPEN."""
+    with patch(_POST, new_callable=AsyncMock, return_value={"status": "OPEN"}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("wcp_reset_instrumen", {})
+    assert result.data["status"] == "OPEN"
+    assert m.await_args.args[0] == "/api/v1/wcp/instrumen/reset"
 
 
 @pytest.mark.asyncio
@@ -436,6 +489,202 @@ async def test_opm_hapus_responden():
 
 
 @pytest.mark.asyncio
+async def test_daftar_opm_sesi():
+    payload = {"items": [{"id": "opm-1", "status": "DRAFT"}], "total": 1}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("daftar_opm_sesi", {})
+    assert result.data["items"][0]["status"] == "DRAFT"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi"
+
+
+@pytest.mark.asyncio
+async def test_buat_opm_sesi():
+    payload = {"id": "opm-baru", "status": "DRAFT"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "buat_opm_sesi",
+                {
+                    "jabatan_id": "jbt_1",
+                    "ti_sesi_id": "tises_1",
+                    "periode": "2026-06",
+                    "min_responden": 3,
+                },
+            )
+    assert result.data["id"] == "opm-baru"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi"
+    assert m.await_args.kwargs["body"] == {
+        "jabatan_id": "jbt_1",
+        "ti_sesi_id": "tises_1",
+        "periode": "2026-06",
+        "min_responden": 3,
+    }
+
+
+@pytest.mark.asyncio
+async def test_cari_opm_sesi():
+    payload = {"items": [{"id": "opm-1"}], "total": 1}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("cari_opm_sesi", {"domain": [["status", "=", "OPEN"]]})
+    assert result.data["total"] == 1
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/search"
+    assert m.await_args.kwargs["body"]["domain"] == [["status", "=", "OPEN"]]
+
+
+@pytest.mark.asyncio
+async def test_detail_opm_sesi():
+    payload = {"id": "opm-1", "status": "OPEN"}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("detail_opm_sesi", {"sesi_id": "opm-1"})
+    assert result.data["status"] == "OPEN"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1"
+
+
+@pytest.mark.asyncio
+async def test_perbarui_opm_sesi():
+    payload = {"id": "opm-1", "catatan": "baru"}
+    with patch(_PATCH, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "perbarui_opm_sesi", {"sesi_id": "opm-1", "catatan": "baru"}
+            )
+    assert result.data["catatan"] == "baru"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1"
+    assert m.await_args.kwargs["body"] == {"catatan": "baru"}
+
+
+@pytest.mark.asyncio
+async def test_opm_buka_sesi():
+    with patch(_POST, new_callable=AsyncMock, return_value={"status": "OPEN"}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("opm_buka_sesi", {"sesi_id": "opm-1"})
+    assert result.data["status"] == "OPEN"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1/buka"
+
+
+@pytest.mark.asyncio
+async def test_opm_tutup_sesi():
+    with patch(_POST, new_callable=AsyncMock, return_value={"status": "CLOSED"}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("opm_tutup_sesi", {"sesi_id": "opm-1"})
+    assert result.data["status"] == "CLOSED"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1/tutup"
+
+
+@pytest.mark.asyncio
+async def test_opm_daftar_task():
+    payload = [{"task_kode": "K001"}]
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("opm_daftar_task", {"sesi_id": "opm-1"})
+    assert result.data[0]["task_kode"] == "K001"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1/task"
+
+
+@pytest.mark.asyncio
+async def test_opm_daftar_responden():
+    payload = [{"id": "oprs-1"}]
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("opm_daftar_responden", {"sesi_id": "opm-1"})
+    assert len(result.data) == 1
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1/responden"
+
+
+@pytest.mark.asyncio
+async def test_opm_detail_responden():
+    payload = {"id": "oprs-1"}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("opm_detail_responden", {"responden_id": "oprs-1"})
+    assert result.data["id"] == "oprs-1"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/responden/oprs-1"
+
+
+@pytest.mark.asyncio
+async def test_opm_submit_jawaban_put_lalu_post():
+    """opm_submit_jawaban WAJIB memanggil PUT .../jawaban lalu POST .../jawaban/submit."""
+    with (
+        patch(_PUT, new_callable=AsyncMock, return_value=[]) as mp,
+        patch(_POST, new_callable=AsyncMock, return_value=[{"id": "j1"}]) as mpost,
+    ):
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "opm_submit_jawaban",
+                {
+                    "responden_id": "oprs-1",
+                    "jawaban": [
+                        {
+                            "task_kode": "K001",
+                            "importance": 4,
+                            "frequency": 3,
+                            "criticality": 5,
+                        }
+                    ],
+                },
+            )
+    assert result.data[0]["id"] == "j1"
+    assert mp.await_args.args[0] == "/api/v1/opm/sesi/responden/oprs-1/jawaban"
+    assert mp.await_args.kwargs["body"] == {
+        "jawaban": [{"task_kode": "K001", "importance": 4, "frequency": 3, "criticality": 5}]
+    }
+    assert mpost.await_args.args[0] == "/api/v1/opm/sesi/responden/oprs-1/jawaban/submit"
+
+
+@pytest.mark.asyncio
+async def test_opm_daftar_jawaban():
+    payload = [{"id": "j1", "task_kode": "K001"}]
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("opm_daftar_jawaban", {"responden_id": "oprs-1"})
+    assert result.data[0]["task_kode"] == "K001"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/responden/oprs-1/jawaban"
+
+
+@pytest.mark.asyncio
+async def test_opm_analisis():
+    payload = {"sesi_id": "opm-1", "status": "ANALYZED"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("opm_analisis", {"sesi_id": "opm-1"})
+    assert result.data["status"] == "ANALYZED"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1/analisis"
+
+
+@pytest.mark.asyncio
+async def test_opm_hasil():
+    payload = {"sesi_id": "opm-1", "tasks": []}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("opm_hasil", {"sesi_id": "opm-1"})
+    assert result.data["sesi_id"] == "opm-1"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1/hasil"
+
+
+@pytest.mark.asyncio
+async def test_opm_kuesioner_saya():
+    payload = [{"sesi_id": "opm-1"}]
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("opm_kuesioner_saya", {})
+    assert len(result.data) == 1
+    assert m.await_args.args[0] == "/api/v1/opm/kuesioner/saya"
+
+
+@pytest.mark.asyncio
+async def test_partisipan_saya():
+    payload = {"id": "par-1", "nama": "Budi"}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("partisipan_saya", {})
+    assert result.data["id"] == "par-1"
+    assert m.await_args.args[0] == "/api/v1/partisipan/saya"
+
+
+@pytest.mark.asyncio
 async def test_ti_catalog_purge():
     payload = {"deleted": {"uraian_tugas": 10, "detil_tugas": 3, "tugas_pokok": 2}}
     with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
@@ -483,6 +732,7 @@ async def test_semua_endpoint_punya_tool():
         "dcs_perbarui_instrumen",
         "dcs_tutup_instrumen",
         "dcs_buka_ulang_instrumen",
+        "dcs_reset_instrumen",
         "dcs_daftar_responden",
         "dcs_tambah_responden",
         "dcs_analisis",
@@ -492,6 +742,7 @@ async def test_semua_endpoint_punya_tool():
         "wcp_perbarui_instrumen",
         "wcp_tutup_instrumen",
         "wcp_buka_ulang_instrumen",
+        "wcp_reset_instrumen",
         "wcp_daftar_responden",
         "wcp_tambah_responden",
         "wcp_analisis",
@@ -520,9 +771,27 @@ async def test_semua_endpoint_punya_tool():
         "hapus_uraian_tugas",
         "ti_catalog_purge",
         "ti_catalog_reseed",
-        # OPM (delete-only)
+        # OPM (CRUD sesi + alur pengisian lengkap)
+        "daftar_opm_sesi",
+        "buat_opm_sesi",
+        "cari_opm_sesi",
+        "detail_opm_sesi",
+        "perbarui_opm_sesi",
         "hapus_opm_sesi",
+        "opm_buka_sesi",
+        "opm_tutup_sesi",
+        "opm_daftar_task",
+        "opm_daftar_responden",
+        "opm_detail_responden",
+        "opm_tambah_responden",
+        "opm_tambah_responden_banyak",
         "opm_hapus_responden",
+        "opm_submit_jawaban",
+        "opm_daftar_jawaban",
+        "opm_analisis",
+        "opm_hasil",
+        "opm_kuesioner_saya",
+        "partisipan_saya",
         # Time Study (penugasan per partisipan, bukan sesi)
         "daftar_ts_penugasan",
         "buat_ts_penugasan",
@@ -532,7 +801,7 @@ async def test_semua_endpoint_punya_tool():
         "ts_kuesioner_saya",
     ]:
         assert nm in names, f"tool {nm} tidak terdaftar"
-    assert len(names) >= 134
+    assert len(names) >= 158
 
 
 @pytest.mark.asyncio
