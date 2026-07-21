@@ -2460,6 +2460,33 @@ async def dcs_perbarui_item(
 
 
 @mcp.tool
+async def dcs_hapus_item(ctx: Context, item_id: str) -> dict:
+    """Hapus satu item pernyataan DCS dari master instrumen (admin).
+
+    Menghapus item **permanen** dari katalog DCS. Jawaban tersimpan untuk item
+    ini ikut terhapus, dan analisis berikutnya dihitung tanpa item tersebut.
+
+    Prasyarat & batasan (ditegakkan backend):
+
+    - **Hanya admin** (403 bila bukan admin).
+    - **Instrumen harus OPEN** (422 bila CLOSED/ANALYZED) — item tidak boleh
+      dihapus setelah/menjelang analisis final.
+    - **Tidak boleh menghapus item terakhir** sebuah sub-skala (422) — tiap
+      sub-skala harus punya minimal 1 item.
+
+    Args:
+        item_id: Kode item orisinal, mis. ``D5b``.
+
+    Returns:
+        Konfirmasi penghapusan (204 tanpa isi).
+    """
+    try:
+        return await backend_delete(f"/api/v1/dcs/sub-skala/items/{item_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
 async def dcs_kuesioner_saya(ctx: Context) -> list:
     """Ambil daftar kuesioner DCS yang di-assign ke saya (responden) — instrumen singleton.
 
@@ -2654,6 +2681,33 @@ async def wcp_perbarui_item(
         body["urutan"] = urutan
     try:
         return await backend_patch(f"/api/v1/wcp/dimensi/items/{item_id}", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def wcp_hapus_item(ctx: Context, item_id: str) -> dict:
+    """Hapus satu item pernyataan WCP dari master instrumen (admin).
+
+    Menghapus item **permanen** dari katalog WCP. Jawaban tersimpan untuk item
+    ini ikut terhapus, dan analisis berikutnya dihitung tanpa item tersebut.
+
+    Prasyarat & batasan (ditegakkan backend):
+
+    - **Hanya admin** (403 bila bukan admin).
+    - **Instrumen harus OPEN** (422 bila CLOSED/ANALYZED) — item tidak boleh
+      dihapus setelah/menjelang analisis final.
+    - **Tidak boleh menghapus item terakhir** sebuah dimensi (422) — tiap
+      dimensi harus punya minimal 1 item.
+
+    Args:
+        item_id: Kode item orisinal, mis. ``SC1a``.
+
+    Returns:
+        Konfirmasi penghapusan (204 tanpa isi).
+    """
+    try:
+        return await backend_delete(f"/api/v1/wcp/dimensi/items/{item_id}", ctx=ctx)
     except BackendError as exc:
         _raise_tool_error(exc)
 

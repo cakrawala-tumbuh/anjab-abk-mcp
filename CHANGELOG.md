@@ -6,6 +6,18 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-21
+
+### Ditambahkan
+
+- **`dcs_hapus_item` & `wcp_hapus_item`** — hapus satu item pernyataan dari master
+  instrumen DCS/WCP (admin). Memanggil `DELETE /api/v1/dcs/sub-skala/items/{item_id}`
+  dan `DELETE /api/v1/wcp/dimensi/items/{item_id}` (backend ≥ 0.38.0). Backend
+  menolak bila instrumen bukan `OPEN` (422), bila item terakhir sebuah
+  sub-skala/dimensi (422), atau bila pemanggil bukan admin (403); jawaban
+  tersimpan untuk item terhapus ikut dibersihkan. Melengkapi `dcs_perbarui_item`/
+  `wcp_perbarui_item` yang selama ini hanya bisa mengubah, belum menghapus.
+
 ## [0.14.0] - 2026-07-15
 
 > Catatan: `src/anjab_abk_mcp/__init__.py` tertinggal di `0.12.0` sejak rilis

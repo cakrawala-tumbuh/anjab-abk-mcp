@@ -42,6 +42,8 @@ async def test_tools_terdaftar():
     assert "opm_submit_jawaban" in names
     assert "dcs_reset_instrumen" in names
     assert "partisipan_saya" in names
+    assert "dcs_hapus_item" in names
+    assert "wcp_hapus_item" in names
 
 
 @pytest.mark.asyncio
@@ -446,6 +448,24 @@ async def test_wcp_hapus_responden_tanpa_sesi():
             result = await client.call_tool("wcp_hapus_responden", {"responden_id": "r1"})
     assert result.data["ok"] is True
     assert m.await_args.args[0] == "/api/v1/wcp/responden/r1"
+
+
+@pytest.mark.asyncio
+async def test_dcs_hapus_item_path():
+    with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("dcs_hapus_item", {"item_id": "D5b"})
+    assert result.data["ok"] is True
+    assert m.await_args.args[0] == "/api/v1/dcs/sub-skala/items/D5b"
+
+
+@pytest.mark.asyncio
+async def test_wcp_hapus_item_path():
+    with patch(_DELETE, new_callable=AsyncMock, return_value={"ok": True}) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("wcp_hapus_item", {"item_id": "SC1a"})
+    assert result.data["ok"] is True
+    assert m.await_args.args[0] == "/api/v1/wcp/dimensi/items/SC1a"
 
 
 @pytest.mark.asyncio
