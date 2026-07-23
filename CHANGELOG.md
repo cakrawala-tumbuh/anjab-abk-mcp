@@ -6,6 +6,8 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-07-23
+
 ### Diubah
 
 - **9 tool list koleksi anak kini mengembalikan envelope `Page[T]`** (`dict`
