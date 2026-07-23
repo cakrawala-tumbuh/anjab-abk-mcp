@@ -290,22 +290,37 @@ async def test_wcp_reset_instrumen():
 
 @pytest.mark.asyncio
 async def test_dcs_daftar_responden_tanpa_argumen():
-    payload = [{"id": "drsp-1"}]
+    payload = {"items": [{"id": "drsp-1"}], "total": 1, "limit": 20, "offset": 0}
     with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool("dcs_daftar_responden", {})
-    assert len(result.data) == 1
+    assert result.data["total"] == 1
+    assert result.data["items"][0]["id"] == "drsp-1"
     assert m.await_args.args[0] == "/api/v1/dcs/responden"
+    assert m.await_args.kwargs["limit"] == 20
+    assert m.await_args.kwargs["offset"] == 0
+
+
+@pytest.mark.asyncio
+async def test_dcs_daftar_responden_meneruskan_limit_offset():
+    payload = {"items": [], "total": 0, "limit": 5, "offset": 10}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            await client.call_tool("dcs_daftar_responden", {"limit": 5, "offset": 10})
+    assert m.await_args.kwargs["limit"] == 5
+    assert m.await_args.kwargs["offset"] == 10
 
 
 @pytest.mark.asyncio
 async def test_wcp_daftar_responden_tanpa_argumen():
-    payload = [{"id": "wrsp-1"}]
+    payload = {"items": [{"id": "wrsp-1"}], "total": 1, "limit": 20, "offset": 0}
     with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool("wcp_daftar_responden", {})
-    assert len(result.data) == 1
+    assert result.data["total"] == 1
+    assert result.data["items"][0]["id"] == "wrsp-1"
     assert m.await_args.args[0] == "/api/v1/wcp/responden"
+    assert m.await_args.kwargs["limit"] == 20
 
 
 @pytest.mark.asyncio
@@ -596,22 +611,30 @@ async def test_opm_tutup_sesi():
 
 @pytest.mark.asyncio
 async def test_opm_daftar_task():
-    payload = [{"task_kode": "K001"}]
+    payload = {"items": [{"task_kode": "K001"}], "total": 1, "limit": 20, "offset": 0}
     with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
             result = await client.call_tool("opm_daftar_task", {"sesi_id": "opm-1"})
-    assert result.data[0]["task_kode"] == "K001"
+    assert result.data["total"] == 1
+    assert result.data["items"][0]["task_kode"] == "K001"
     assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1/task"
+    assert m.await_args.kwargs["limit"] == 20
+    assert m.await_args.kwargs["offset"] == 0
 
 
 @pytest.mark.asyncio
 async def test_opm_daftar_responden():
-    payload = [{"id": "oprs-1"}]
+    payload = {"items": [{"id": "oprs-1"}], "total": 1, "limit": 20, "offset": 0}
     with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
         async with Client(mcp) as client:
-            result = await client.call_tool("opm_daftar_responden", {"sesi_id": "opm-1"})
-    assert len(result.data) == 1
+            result = await client.call_tool(
+                "opm_daftar_responden", {"sesi_id": "opm-1", "limit": 50, "offset": 5}
+            )
+    assert result.data["total"] == 1
+    assert result.data["items"][0]["id"] == "oprs-1"
     assert m.await_args.args[0] == "/api/v1/opm/sesi/opm-1/responden"
+    assert m.await_args.kwargs["limit"] == 50
+    assert m.await_args.kwargs["offset"] == 5
 
 
 @pytest.mark.asyncio
@@ -1037,3 +1060,118 @@ async def test_hapus_uraian_tugas():
             result = await client.call_tool("hapus_uraian_tugas", {"ut_id": "ut-1"})
     assert result.data["ok"] is True
     assert "/api/v1/task-inventory/uraian-tugas/ut-1" in m.await_args.args[0]
+
+
+# ── Tool list koleksi anak → kontrak Page[T] (envelope items/total) ───────────
+# Ke-9 tool ini sebelumnya mengembalikan array telanjang; kini selaras dengan
+# backend yang membalas Page[T] {items,total,limit,offset} dan konvensi rumah
+# tool ``daftar_*``. Test memverifikasi bentuk dict envelope + penerusan
+# limit/offset ke backend, plus jalur error yang tidak membocorkan traceback.
+
+
+@pytest.mark.asyncio
+async def test_ti_daftar_responden_envelope_dan_paginasi():
+    payload = {"items": [{"id": "x"}], "total": 1, "limit": 20, "offset": 0}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "ti_daftar_responden", {"sesi_id": "ti-1", "limit": 30, "offset": 60}
+            )
+    assert result.data["items"][0]["id"] == "x"
+    assert result.data["total"] == 1
+    assert m.await_args.args[0] == "/api/v1/task-inventory/sesi/ti-1/responden"
+    assert m.await_args.kwargs["limit"] == 30
+    assert m.await_args.kwargs["offset"] == 60
+
+
+@pytest.mark.asyncio
+async def test_ti_task_terpilih_envelope_dan_paginasi():
+    payload = {"items": [{"id": "x"}], "total": 1, "limit": 20, "offset": 0}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "ti_task_terpilih", {"sesi_id": "ti-1", "limit": 7, "offset": 3}
+            )
+    assert result.data["items"][0]["id"] == "x"
+    assert result.data["total"] == 1
+    assert m.await_args.args[0] == "/api/v1/task-inventory/sesi/ti-1/task-terpilih"
+    assert m.await_args.kwargs["limit"] == 7
+    assert m.await_args.kwargs["offset"] == 3
+
+
+@pytest.mark.asyncio
+async def test_ti_daftar_detail_envelope_dan_paginasi():
+    payload = {"items": [{"id": "x"}], "total": 1, "limit": 20, "offset": 0}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "ti_daftar_detail", {"responden_id": "rsp-1", "limit": 9, "offset": 0}
+            )
+    assert result.data["items"][0]["id"] == "x"
+    assert result.data["total"] == 1
+    assert m.await_args.args[0] == "/api/v1/task-inventory/sesi/responden/rsp-1/detail"
+    assert m.await_args.kwargs["limit"] == 9
+    assert m.await_args.kwargs["offset"] == 0
+
+
+@pytest.mark.asyncio
+async def test_ti_catalog_envelope_dengan_filter_dan_paginasi():
+    payload = {"items": [{"id": "x"}], "total": 1, "limit": 20, "offset": 0}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "ti_catalog",
+                {"jabatan_id": "jbt_1", "unit": "SD", "limit": 15, "offset": 45},
+            )
+    assert result.data["items"][0]["id"] == "x"
+    assert result.data["total"] == 1
+    assert m.await_args.args[0] == "/api/v1/task-inventory/catalog"
+    # ti_catalog meneruskan filter + paginasi sebagai kwargs ke backend_get
+    assert m.await_args.kwargs["jabatan_id"] == "jbt_1"
+    assert m.await_args.kwargs["unit"] == "SD"
+    assert m.await_args.kwargs["limit"] == 15
+    assert m.await_args.kwargs["offset"] == 45
+
+
+@pytest.mark.asyncio
+async def test_ti_catalog_paginasi_default_tanpa_filter():
+    payload = {"items": [], "total": 0, "limit": 20, "offset": 0}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            await client.call_tool("ti_catalog", {})
+    # limit/offset tetap diteruskan meski jabatan_id/unit tak diisi
+    assert m.await_args.kwargs["limit"] == 20
+    assert m.await_args.kwargs["offset"] == 0
+    assert "jabatan_id" not in m.await_args.kwargs
+    assert "unit" not in m.await_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_ts_daftar_log_envelope_dan_paginasi():
+    payload = {"items": [{"id": "x"}], "total": 1, "limit": 20, "offset": 0}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "ts_daftar_log", {"penugasan_id": "pen-1", "limit": 12, "offset": 24}
+            )
+    assert result.data["items"][0]["id"] == "x"
+    assert result.data["total"] == 1
+    assert m.await_args.args[0] == "/api/v1/time-study/penugasan/pen-1/log"
+    assert m.await_args.kwargs["limit"] == 12
+    assert m.await_args.kwargs["offset"] == 24
+
+
+@pytest.mark.asyncio
+async def test_tool_list_koleksi_anak_backend_error_jadi_tool_error():
+    """BackendError dari backend_get diubah jadi ToolError (pesan aman, bukan traceback mentah)."""
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with patch(_GET, new_callable=AsyncMock, side_effect=BackendError("Backend error 500: boom")):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool("dcs_daftar_responden", {})
+    teks = str(exc_info.value)
+    assert "Traceback" not in teks
+    assert "Backend error 500" in teks

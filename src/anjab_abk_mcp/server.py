@@ -618,7 +618,12 @@ async def ti_mulai_tahap3(ctx: Context, sesi_id: str, paksa: bool = False) -> di
 
 
 @mcp.tool
-async def ti_task_terpilih(ctx: Context, sesi_id: str) -> list:
+async def ti_task_terpilih(
+    ctx: Context,
+    sesi_id: str,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
     """Ambil daftar task yang terpilih (final) untuk sesi TI.
 
     ``sesi_id`` mengacu ke satu sesi TI (satu jabatan) — hasil di sini adalah
@@ -629,12 +634,20 @@ async def ti_task_terpilih(ctx: Context, sesi_id: str) -> list:
 
     Args:
         sesi_id: UUID sesi TI.
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
 
     Returns:
-        Dict berisi list task yang terpilih beserta detail CalHR (bila sudah diisi).
+        Dict dengan keys ``items`` (list task terpilih beserta detail CalHR bila
+        sudah diisi) dan ``total`` (total record).
     """
     try:
-        return await backend_get(f"/api/v1/task-inventory/sesi/{sesi_id}/task-terpilih", ctx=ctx)
+        return await backend_get(
+            f"/api/v1/task-inventory/sesi/{sesi_id}/task-terpilih",
+            ctx=ctx,
+            limit=limit,
+            offset=offset,
+        )
     except BackendError as exc:
         _raise_tool_error(exc)
 
@@ -810,14 +823,23 @@ async def dcs_reset_instrumen(ctx: Context) -> dict:
 
 
 @mcp.tool
-async def dcs_daftar_responden(ctx: Context) -> list:
+async def dcs_daftar_responden(
+    ctx: Context,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
     """Ambil daftar seluruh responden DCS (admin) — instrumen singleton, tanpa sesi.
 
+    Args:
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
+
     Returns:
-        Daftar seluruh responden DCS yang terdaftar.
+        Dict dengan keys ``items`` (list responden DCS yang terdaftar) dan
+        ``total`` (total record).
     """
     try:
-        return await backend_get("/api/v1/dcs/responden", ctx=ctx)
+        return await backend_get("/api/v1/dcs/responden", ctx=ctx, limit=limit, offset=offset)
     except BackendError as exc:
         _raise_tool_error(exc)
 
@@ -987,14 +1009,23 @@ async def wcp_reset_instrumen(ctx: Context) -> dict:
 
 
 @mcp.tool
-async def wcp_daftar_responden(ctx: Context) -> list:
+async def wcp_daftar_responden(
+    ctx: Context,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
     """Ambil daftar seluruh responden WCP (admin) — instrumen singleton, tanpa sesi.
 
+    Args:
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
+
     Returns:
-        Daftar seluruh responden WCP yang terdaftar.
+        Dict dengan keys ``items`` (list responden WCP yang terdaftar) dan
+        ``total`` (total record).
     """
     try:
-        return await backend_get("/api/v1/wcp/responden", ctx=ctx)
+        return await backend_get("/api/v1/wcp/responden", ctx=ctx, limit=limit, offset=offset)
     except BackendError as exc:
         _raise_tool_error(exc)
 
@@ -1966,7 +1997,12 @@ async def hapus_ti_sesi(ctx: Context, sesi_id: str, paksa: bool = False) -> dict
 
 
 @mcp.tool
-async def ti_daftar_responden(ctx: Context, sesi_id: str) -> list:
+async def ti_daftar_responden(
+    ctx: Context,
+    sesi_id: str,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
     """Ambil daftar responden pada sebuah sesi Task Inventory.
 
     Responden di sini adalah anggota SME panel untuk jabatan yang dikaji sesi
@@ -1974,12 +2010,20 @@ async def ti_daftar_responden(ctx: Context, sesi_id: str) -> list:
 
     Args:
         sesi_id: UUID sesi TI.
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
 
     Returns:
-        Daftar responden sesi.
+        Dict dengan keys ``items`` (list responden sesi) dan ``total``
+        (total record).
     """
     try:
-        return await backend_get(f"/api/v1/task-inventory/sesi/{sesi_id}/responden", ctx=ctx)
+        return await backend_get(
+            f"/api/v1/task-inventory/sesi/{sesi_id}/responden",
+            ctx=ctx,
+            limit=limit,
+            offset=offset,
+        )
     except BackendError as exc:
         _raise_tool_error(exc)
 
@@ -2120,7 +2164,12 @@ async def ti_submit_tahap2(ctx: Context, sesi_id: str, keputusan: list[dict]) ->
 
 
 @mcp.tool
-async def ti_daftar_detail(ctx: Context, responden_id: str) -> list:
+async def ti_daftar_detail(
+    ctx: Context,
+    responden_id: str,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
     """Ambil detail CalHR (Tahap 3) yang sudah diisi responden.
 
     Detail ini untuk task milik jabatan yang dikaji sesi TI tempat responden
@@ -2128,13 +2177,19 @@ async def ti_daftar_detail(ctx: Context, responden_id: str) -> list:
 
     Args:
         responden_id: UUID responden.
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
 
     Returns:
-        Daftar detail task (5 komponen CalHR) milik responden.
+        Dict dengan keys ``items`` (list detail task 5 komponen CalHR milik
+        responden) dan ``total`` (total record).
     """
     try:
         return await backend_get(
-            f"/api/v1/task-inventory/sesi/responden/{responden_id}/detail", ctx=ctx
+            f"/api/v1/task-inventory/sesi/responden/{responden_id}/detail",
+            ctx=ctx,
+            limit=limit,
+            offset=offset,
         )
     except BackendError as exc:
         _raise_tool_error(exc)
@@ -2200,7 +2255,9 @@ async def ti_catalog(
     ctx: Context,
     jabatan_id: str | None = None,
     unit: str | None = None,
-) -> list:
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
     """Ambil katalog task inventory (master task) dengan filter opsional.
 
     Katalog ini bersifat master (lintas jabatan) — filter ``jabatan_id`` menyaring
@@ -2219,12 +2276,15 @@ async def ti_catalog(
         jabatan_id: Filter ID jabatan (opsional). Gunakan ``ti_catalog_kombinasi``
             untuk melihat jabatan_id yang tersedia.
         unit: Filter unit kerja (opsional).
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
 
     Returns:
-        Daftar task katalog sesuai filter, lengkap dengan id & nama tugas pokok,
-        detil tugas, serta uraian tugas.
+        Dict dengan keys ``items`` (list task katalog sesuai filter, lengkap
+        dengan id & nama tugas pokok, detil tugas, serta uraian tugas) dan
+        ``total`` (total record).
     """
-    params: dict = {}
+    params: dict = {"limit": limit, "offset": offset}
     if jabatan_id is not None:
         params["jabatan_id"] = jabatan_id
     if unit is not None:
@@ -2953,7 +3013,12 @@ async def opm_tutup_sesi(ctx: Context, sesi_id: str) -> dict:
 
 
 @mcp.tool
-async def opm_daftar_task(ctx: Context, sesi_id: str) -> list:
+async def opm_daftar_task(
+    ctx: Context,
+    sesi_id: str,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
     """Ambil snapshot task sesi OPM (daftar task yang dinilai prioritasnya).
 
     Task ini adalah salinan (frozen) dari task terpilih sesi Task Inventory
@@ -2961,18 +3026,31 @@ async def opm_daftar_task(ctx: Context, sesi_id: str) -> list:
 
     Args:
         sesi_id: UUID sesi OPM.
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
 
     Returns:
-        Daftar task snapshot (kode + uraian) untuk sesi ini.
+        Dict dengan keys ``items`` (list task snapshot berupa kode + uraian untuk
+        sesi ini) dan ``total`` (total record).
     """
     try:
-        return await backend_get(f"/api/v1/opm/sesi/{sesi_id}/task", ctx=ctx)
+        return await backend_get(
+            f"/api/v1/opm/sesi/{sesi_id}/task",
+            ctx=ctx,
+            limit=limit,
+            offset=offset,
+        )
     except BackendError as exc:
         _raise_tool_error(exc)
 
 
 @mcp.tool
-async def opm_daftar_responden(ctx: Context, sesi_id: str) -> list:
+async def opm_daftar_responden(
+    ctx: Context,
+    sesi_id: str,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
     """Ambil daftar responden pada sebuah sesi OPM.
 
     Responden di sini adalah anggota SME panel untuk jabatan yang dinilai sesi
@@ -2980,12 +3058,20 @@ async def opm_daftar_responden(ctx: Context, sesi_id: str) -> list:
 
     Args:
         sesi_id: UUID sesi OPM.
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
 
     Returns:
-        Daftar responden sesi.
+        Dict dengan keys ``items`` (list responden sesi) dan ``total``
+        (total record).
     """
     try:
-        return await backend_get(f"/api/v1/opm/sesi/{sesi_id}/responden", ctx=ctx)
+        return await backend_get(
+            f"/api/v1/opm/sesi/{sesi_id}/responden",
+            ctx=ctx,
+            limit=limit,
+            offset=offset,
+        )
     except BackendError as exc:
         _raise_tool_error(exc)
 
@@ -3389,17 +3475,30 @@ async def hapus_ts_penugasan(ctx: Context, penugasan_id: str) -> dict:
 
 
 @mcp.tool
-async def ts_daftar_log(ctx: Context, penugasan_id: str) -> list:
+async def ts_daftar_log(
+    ctx: Context,
+    penugasan_id: str,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
     """Ambil daftar log harian Time Study milik sebuah penugasan.
 
     Args:
         penugasan_id: UUID penugasan TS.
+        limit: Jumlah item per halaman (maks 100, default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
 
     Returns:
-        Daftar log harian penugasan.
+        Dict dengan keys ``items`` (list log harian penugasan) dan ``total``
+        (total record).
     """
     try:
-        return await backend_get(f"/api/v1/time-study/penugasan/{penugasan_id}/log", ctx=ctx)
+        return await backend_get(
+            f"/api/v1/time-study/penugasan/{penugasan_id}/log",
+            ctx=ctx,
+            limit=limit,
+            offset=offset,
+        )
     except BackendError as exc:
         _raise_tool_error(exc)
 

@@ -6,6 +6,21 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Diubah
+
+- **9 tool list koleksi anak kini mengembalikan envelope `Page[T]`** (`dict`
+  dengan `items`/`total`/`limit`/`offset`), bukan lagi array telanjang —
+  menyelaraskan diri dengan `anjab-abk-backend` yang memaginasi endpoint-nya ke
+  `Page[T]` (backend #22) dan dengan konvensi rumah tool `daftar_*`. Tool
+  terdampak: `dcs_daftar_responden`, `wcp_daftar_responden`,
+  `opm_daftar_responden`, `opm_daftar_task`, `ti_daftar_responden`,
+  `ti_task_terpilih`, `ti_daftar_detail`, `ti_catalog`, dan `ts_daftar_log`.
+  Kesembilannya kini menerima parameter `limit`/`offset` (default `20`/`0`) dan
+  meneruskannya ke backend; `ti_catalog` mempertahankan filter `jabatan_id`/`unit`
+  di samping paginasi baru. Ini perubahan bentuk keluaran tool yang disengaja —
+  klien yang membaca hasilnya harus mengambil `result["items"]`, bukan
+  mengiterasi list secara langsung.
+
 ## [0.15.0] - 2026-07-21
 
 ### Ditambahkan
