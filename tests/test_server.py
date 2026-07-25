@@ -1041,6 +1041,60 @@ async def test_buat_uraian_tugas():
 
 
 @pytest.mark.asyncio
+async def test_buat_uraian_tugas_std_va_type_context_dependent():
+    """std_va_type="Context-Dependent" diteruskan; std_ai_mode/std_dcs_flag tak pernah dikirim."""
+    payload = {"id": "ut-baru", "kode": "UT-003", "uraian": "Menyusun KD"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            await client.call_tool(
+                "buat_uraian_tugas",
+                {
+                    "kode": "UT-003",
+                    "uraian": "Menyusun KD",
+                    "unit": "SMP",
+                    "urutan": 1,
+                    "tugas_pokok_id": "tp-1",
+                    "jabatan_id": "jbt_1",
+                    "std_va_type": "Context-Dependent",
+                },
+            )
+    body = m.await_args.kwargs["body"]
+    assert body["std_va_type"] == "Context-Dependent"
+    assert "std_ai_mode" not in body
+    assert "std_dcs_flag" not in body
+
+
+@pytest.mark.asyncio
+async def test_buat_uraian_tugas_std_ai_mode_parameter_dihapus():
+    """std_ai_mode bukan lagi parameter dikenal — memanggilnya harus gagal."""
+    async with Client(mcp) as client:
+        with pytest.raises(Exception):
+            await client.call_tool(
+                "buat_uraian_tugas",
+                {
+                    "kode": "UT-004",
+                    "uraian": "Menyusun KD",
+                    "unit": "SMP",
+                    "urutan": 1,
+                    "tugas_pokok_id": "tp-1",
+                    "jabatan_id": "jbt_1",
+                    "std_ai_mode": "Human-led",
+                },
+            )
+
+
+@pytest.mark.asyncio
+async def test_perbarui_uraian_tugas_std_dcs_flag_parameter_dihapus():
+    """std_dcs_flag bukan lagi parameter dikenal — memanggilnya harus gagal."""
+    async with Client(mcp) as client:
+        with pytest.raises(Exception):
+            await client.call_tool(
+                "perbarui_uraian_tugas",
+                {"ut_id": "ut-1", "std_dcs_flag": True},
+            )
+
+
+@pytest.mark.asyncio
 async def test_cari_uraian_tugas():
     payload = {"items": [], "total": 0}
     with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:

@@ -2211,9 +2211,8 @@ async def ti_submit_detail(ctx: Context, responden_id: str, detail: list[dict]) 
         detail: Daftar detail task. Tiap item memuat ``task_kode``, ``sumber_bukti``
             (Formal/Aktual/Keduanya), ``kondisi`` (Baseline/Peak/Both),
             ``frekuensi_teks``, ``durasi_per_kali`` (menit), ``jam_per_minggu``,
-            ``ai_mode`` (Human-led/Co-Pilot/AI-assisted),
             ``va_type`` (VA-Core/VA-Enable/NVA-Residual), serta opsional
-            ``peak4w_hours``, ``dcs_flag``, ``setuju_standar`` (bool, default True —
+            ``peak4w_hours``, ``setuju_standar`` (bool, default True —
             False bila responden mengubah dari nilai standar master), ``catatan``.
 
     Returns:
@@ -4006,9 +4005,7 @@ async def buat_uraian_tugas(
     std_durasi_per_kali: int | None = None,
     std_jam_per_minggu: float | None = None,
     std_peak4w_hours: float | None = None,
-    std_ai_mode: str | None = None,
     std_va_type: str | None = None,
-    std_dcs_flag: bool | None = None,
 ) -> dict:
     """Buat entri Uraian Tugas baru pada katalog Task Inventory.
 
@@ -4032,9 +4029,8 @@ async def buat_uraian_tugas(
         std_durasi_per_kali: Nilai standar durasi per pelaksanaan dalam menit (opsional).
         std_jam_per_minggu: Nilai standar jam per minggu (opsional).
         std_peak4w_hours: Nilai standar jam pada 4 minggu peak (opsional).
-        std_ai_mode: Nilai standar AI mode (Human-led/Co-Pilot/AI-assisted, opsional).
-        std_va_type: Nilai standar VA type (VA-Core/VA-Enable/NVA-Residual, opsional).
-        std_dcs_flag: Nilai standar flag risiko DCS (opsional).
+        std_va_type: Nilai standar VA type (VA-Core/VA-Enable/NVA-Residual/
+            Context-Dependent, opsional).
 
     Returns:
         Data uraian tugas yang baru dibuat termasuk ``id``.
@@ -4061,12 +4057,8 @@ async def buat_uraian_tugas(
         body["std_jam_per_minggu"] = std_jam_per_minggu
     if std_peak4w_hours is not None:
         body["std_peak4w_hours"] = std_peak4w_hours
-    if std_ai_mode is not None:
-        body["std_ai_mode"] = std_ai_mode
     if std_va_type is not None:
         body["std_va_type"] = std_va_type
-    if std_dcs_flag is not None:
-        body["std_dcs_flag"] = std_dcs_flag
     try:
         return await backend_post("/api/v1/task-inventory/uraian-tugas", ctx=ctx, body=body)
     except BackendError as exc:
@@ -4133,9 +4125,7 @@ async def perbarui_uraian_tugas(
     std_durasi_per_kali: int | None = None,
     std_jam_per_minggu: float | None = None,
     std_peak4w_hours: float | None = None,
-    std_ai_mode: str | None = None,
     std_va_type: str | None = None,
-    std_dcs_flag: bool | None = None,
 ) -> dict:
     """Perbarui sebagian field Uraian Tugas.
 
@@ -4158,9 +4148,8 @@ async def perbarui_uraian_tugas(
         std_durasi_per_kali: Nilai standar durasi per pelaksanaan baru dalam menit (opsional).
         std_jam_per_minggu: Nilai standar jam per minggu baru (opsional).
         std_peak4w_hours: Nilai standar jam pada 4 minggu peak baru (opsional).
-        std_ai_mode: Nilai standar AI mode baru (Human-led/Co-Pilot/AI-assisted, opsional).
-        std_va_type: Nilai standar VA type baru (VA-Core/VA-Enable/NVA-Residual, opsional).
-        std_dcs_flag: Nilai standar flag risiko DCS baru (opsional).
+        std_va_type: Nilai standar VA type baru (VA-Core/VA-Enable/NVA-Residual/
+            Context-Dependent, opsional).
 
     Returns:
         Data uraian tugas setelah diperbarui.
@@ -4192,12 +4181,8 @@ async def perbarui_uraian_tugas(
         body["std_jam_per_minggu"] = std_jam_per_minggu
     if std_peak4w_hours is not None:
         body["std_peak4w_hours"] = std_peak4w_hours
-    if std_ai_mode is not None:
-        body["std_ai_mode"] = std_ai_mode
     if std_va_type is not None:
         body["std_va_type"] = std_va_type
-    if std_dcs_flag is not None:
-        body["std_dcs_flag"] = std_dcs_flag
     try:
         return await backend_patch(
             f"/api/v1/task-inventory/uraian-tugas/{ut_id}", ctx=ctx, body=body

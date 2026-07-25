@@ -6,6 +6,20 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Dihapus
+
+- **`std_ai_mode`/`std_dcs_flag`** dihapus dari parameter tool `buat_uraian_tugas` &
+  `perbarui_uraian_tugas`, beserta penyebutan `ai_mode`/`dcs_flag` di docstring
+  `ti_submit_detail` — menyelaraskan tool CalHR MCP dengan kontrak
+  `anjab-abk-backend` terkini yang sudah menghapus kedua field itu dan menolak
+  (`422`) payload yang masih menyertakannya (`extra="forbid"`).
+
+### Diubah
+
+- Docstring `std_va_type` pada `buat_uraian_tugas` & `perbarui_uraian_tugas` kini
+  mencantumkan 4 nilai prefill: `VA-Core` / `VA-Enable` / `NVA-Residual` /
+  `Context-Dependent`.
+
 ## [0.16.0] - 2026-07-23
 
 ### Diubah
