@@ -6,6 +6,8 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-07-26
+
 ### Dihapus
 
 - **`std_ai_mode`/`std_dcs_flag`** dihapus dari parameter tool `buat_uraian_tugas` &
