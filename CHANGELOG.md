@@ -6,6 +6,22 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Diubah
+
+- **Docstring tool OPM diperbarui untuk sesi terpisah per jabatan+cabang**
+  (menyelaraskan dengan `anjab-abk-backend#37`): `daftar_opm_sesi`,
+  `detail_opm_sesi`, `cari_opm_sesi`, `buat_opm_sesi`, `perbarui_opm_sesi`,
+  `opm_hasil`, `opm_kuesioner_saya`, dan `hapus_opm_sesi` kini menyatakan satu
+  sesi OPM = satu jabatan **pada satu cabang** (satu jabatan boleh punya sesi
+  OPM Bandung dan Semarang berdampingan), dan `cari_opm_sesi` mencantumkan
+  `cabang` sebagai field `domain` yang sah. Docstring `opm_daftar_responden`,
+  `opm_tambah_responden`, dan `opm_tambah_responden_banyak` dikoreksi:
+  responden auto-populate kini berasal dari responden sesi Task Inventory
+  sumber yang sudah submit Tahap 1 — bukan lagi seluruh anggota SME panel.
+  **Tidak ada perubahan signature tool apa pun** — murni perbaikan deskripsi
+  yang dibaca klien (Claude); `buat_opm_sesi` tetap tidak menerima parameter
+  `cabang` (diturunkan otomatis dari `ti_sesi_id`).
+
 ## [0.17.0] - 2026-07-26
 
 ### Dihapus

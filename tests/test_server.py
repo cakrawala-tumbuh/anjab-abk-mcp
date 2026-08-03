@@ -1229,3 +1229,43 @@ async def test_tool_list_koleksi_anak_backend_error_jadi_tool_error():
     teks = str(exc_info.value)
     assert "Traceback" not in teks
     assert "Backend error 500" in teks
+
+
+# ── Docstring tool OPM: sesi terpisah per jabatan+cabang (backlog #10) ──────
+
+
+@pytest.mark.asyncio
+async def test_docstring_tool_opm_menyebut_cabang():
+    """Keempat tool OPM inti wajib menyebut ``cabang`` di deskripsinya.
+
+    Deskripsi tool = docstring fungsi yang dibaca klien (Claude); tanpa kata
+    ``cabang`` di sini, agen akan kembali menyimpulkan satu jabatan = satu
+    sesi OPM (backlog `anjab-abk-mcp#10`).
+    """
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in await client.list_tools()}
+    for nama in ("daftar_opm_sesi", "detail_opm_sesi", "cari_opm_sesi", "buat_opm_sesi"):
+        deskripsi = tools[nama].description or ""
+        assert "cabang" in deskripsi.lower(), f"{nama} tidak menyebut 'cabang': {deskripsi!r}"
+
+
+@pytest.mark.asyncio
+async def test_buat_opm_sesi_parameter_tidak_bertambah_cabang():
+    """Penjaga regresi: cabang OPM DITURUNKAN dari `ti_sesi_id`, bukan parameter.
+
+    Backend menolak `422` bila payload `buat_opm_sesi` menyertakan `cabang`
+    (`OpmSesiCreate` memakai `extra="forbid"`) — signature tool ini tidak boleh
+    diam-diam bertambah parameter `cabang` di kemudian hari.
+    """
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in await client.list_tools()}
+    parameter = set(tools["buat_opm_sesi"].inputSchema["properties"].keys())
+    assert parameter == {
+        "jabatan_id",
+        "ti_sesi_id",
+        "periode",
+        "min_responden",
+        "max_responden",
+        "catatan",
+    }
+    assert "cabang" not in parameter

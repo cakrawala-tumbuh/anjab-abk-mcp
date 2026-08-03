@@ -2815,17 +2815,23 @@ async def wcp_hasil_responden(ctx: Context, responden_id: str) -> dict:
 #
 # Berbeda dari DCS/WCP (instrumen singleton tanpa sesi), OPM tetap memakai sesi
 # (`sesi_id`) seperti TI — satu sesi OPM = satu analisis prioritas untuk satu
-# jabatan. OPM juga tetap memakai `periode`/`min_responden`/`max_responden`
-# (TI membuangnya di backlog 037; OPM sengaja tidak ikut).
+# jabatan PADA SATU CABANG (`"Bandung"`/`"Semarang"`, bisa `null` untuk sesi
+# lama). Sejak backlog `anjab-abk-backend#37`, satu jabatan boleh punya sesi OPM
+# Bandung DAN Semarang berdampingan — `cabang` DITURUNKAN otomatis dari
+# `ti_sesi.cabang` sesi TI sumber (`ti_sesi_id`), bukan parameter yang diterima
+# `buat_opm_sesi`. OPM juga tetap memakai `periode`/`min_responden`/
+# `max_responden` (TI membuangnya di backlog 037; OPM sengaja tidak ikut).
 
 
 @mcp.tool
 async def daftar_opm_sesi(ctx: Context, limit: int = 50, offset: int = 0) -> dict:
     """Ambil daftar sesi OPM (Overall Priority Matrix) yang ada dalam sistem.
 
-    Satu "sesi" OPM adalah satu analisis prioritas task untuk **satu jabatan**
-    — bukan sesi studi multi-partisipan. Satu studi ANJAB/ABK biasanya memiliki
-    banyak sesi OPM, satu per jabatan yang dikaji.
+    Satu "sesi" OPM adalah satu analisis prioritas task untuk **satu jabatan
+    pada satu cabang** (``"Bandung"``/``"Semarang"``, bisa ``null`` untuk sesi
+    lama) — bukan sesi studi multi-partisipan. Satu jabatan boleh punya sesi OPM
+    Bandung DAN Semarang berdampingan; satu studi ANJAB/ABK biasanya memiliki
+    banyak sesi OPM, satu per kombinasi jabatan+cabang yang dikaji.
 
     Alur status sesi OPM: DRAFT → OPEN → CLOSED → ANALYZED. Tiap sesi OPM
     dibangun dari snapshot task sesi Task Inventory yang sudah frozen.
@@ -2856,21 +2862,29 @@ async def buat_opm_sesi(
     """Buat sesi OPM baru dari snapshot task sesi Task Inventory (status awal: DRAFT).
 
     Satu sesi OPM mencakup analisis prioritas task untuk satu jabatan
-    (``jabatan_id``), memakai snapshot task dari sesi TI (``ti_sesi_id``) yang
-    task-nya sudah frozen (Tahap 3 selesai). Untuk menganalisis banyak jabatan,
-    buat satu sesi OPM terpisah per jabatan.
+    (``jabatan_id``) **pada satu cabang**, memakai snapshot task dari sesi TI
+    (``ti_sesi_id``) yang task-nya sudah frozen (Tahap 3 selesai). Cabang sesi
+    OPM **tidak dipilih lewat parameter tool ini** — ia DITURUNKAN otomatis dari
+    ``ti_sesi.cabang`` milik ``ti_sesi_id`` yang dikirim (echo di respons sebagai
+    ``cabang``). Untuk membuat sesi OPM cabang lain, pilih ``ti_sesi_id`` sesi TI
+    cabang itu — jangan mengira ada parameter ``cabang`` terpisah. Untuk
+    menganalisis banyak jabatan atau banyak cabang, buat satu sesi OPM terpisah
+    per kombinasi jabatan+cabang. Ditolak (409) bila sesi OPM untuk kombinasi
+    jabatan+cabang ini sudah ada — pesan konflik menyebut nama jabatan dan
+    cabang, bukan ID mentah.
 
     Args:
         jabatan_id: ID jabatan yang dinilai (FK ke Jabatan; wajib punya SME panel).
         ti_sesi_id: UUID sesi Task Inventory sumber snapshot task (harus sudah
-            frozen).
+            frozen). Cabang sesi OPM mengikuti cabang sesi TI ini.
         periode: Periode survei format ``YYYY-MM``, mis. ``2026-06``.
         min_responden: Jumlah minimum responden (opsional, default backend 3).
         max_responden: Jumlah maksimum responden (opsional, default backend 10).
         catatan: Catatan tambahan untuk sesi ini (opsional).
 
     Returns:
-        Data sesi OPM yang baru dibuat termasuk ``id`` (UUID).
+        Data sesi OPM yang baru dibuat termasuk ``id`` (UUID) dan ``cabang``
+        (diturunkan dari sesi TI sumber).
     """
     body: dict = {"jabatan_id": jabatan_id, "ti_sesi_id": ti_sesi_id, "periode": periode}
     for key, value in (
@@ -2897,10 +2911,15 @@ async def cari_opm_sesi(
     """Cari sesi OPM dengan domain bergaya Odoo.
 
     Ingat: tiap hasil adalah satu sesi OPM = satu analisis prioritas untuk satu
-    jabatan.
+    jabatan **pada satu cabang** — satu jabatan bisa punya sesi Bandung dan
+    Semarang berdampingan, jadi saring ``cabang`` bila hanya ingin salah satunya.
+
+    Field yang sah dipakai di ``domain``: ``id``, ``jabatan_id``, ``ti_sesi_id``,
+    ``periode``, ``cabang``, ``status``, ``created_at``.
 
     Args:
-        domain: Kriteria pencarian, mis. ``[["status", "=", "OPEN"]]``.
+        domain: Kriteria pencarian, mis.
+            ``[["jabatan_id", "=", "jbt_a1b2c3d4"], ["cabang", "=", "Bandung"]]``.
         order: Urutan hasil.
         limit: Jumlah item per halaman (default 50).
         offset: Item yang dilewati untuk paginasi (default 0).
@@ -2917,10 +2936,12 @@ async def cari_opm_sesi(
 
 @mcp.tool
 async def detail_opm_sesi(ctx: Context, sesi_id: str) -> dict:
-    """Ambil detail satu sesi OPM termasuk status, jabatan, dan periode.
+    """Ambil detail satu sesi OPM termasuk status, jabatan, cabang, dan periode.
 
-    Satu sesi OPM = satu analisis prioritas untuk satu jabatan (bukan sesi
-    studi multi-partisipan).
+    Satu sesi OPM = satu analisis prioritas untuk satu jabatan **pada satu
+    cabang** (bukan sesi studi multi-partisipan) — jabatan yang sama bisa
+    punya sesi OPM Bandung dan Semarang berdampingan; ``cabang`` di respons
+    membedakan keduanya (bisa ``null`` untuk sesi lama).
 
     Args:
         sesi_id: UUID sesi OPM (dari ``daftar_opm_sesi``).
@@ -2946,7 +2967,10 @@ async def perbarui_opm_sesi(
     """Perbarui sebagian field sesi OPM (hanya saat status DRAFT).
 
     ``jabatan_id`` dan ``ti_sesi_id`` tidak dapat diubah — ganti sumber berarti
-    hapus sesi lalu buat ulang. Hanya field yang diisi (non-None) yang dikirim.
+    hapus sesi lalu buat ulang. ``cabang`` juga tidak dapat diubah lewat tool
+    ini (tidak ada parameternya di sini) karena ia turunan ``ti_sesi_id`` yang
+    memang sudah tidak dapat diubah. Hanya field yang diisi (non-None) yang
+    dikirim.
 
     Args:
         sesi_id: UUID sesi OPM.
@@ -3052,8 +3076,13 @@ async def opm_daftar_responden(
 ) -> dict:
     """Ambil daftar responden pada sebuah sesi OPM.
 
-    Responden di sini adalah anggota SME panel untuk jabatan yang dinilai sesi
-    ini (satu sesi OPM = satu jabatan), bukan seluruh partisipan studi.
+    Responden di sini adalah partisipan yang sudah submit Tahap 1 sesi Task
+    Inventory sumber (``ti_sesi_id``) sesi OPM ini — auto-populate saat sesi
+    OPM dibuat mengambil dari responden TI yang sudah mengerjakan, **bukan**
+    seluruh anggota SME panel jabatan (berubah sejak
+    `anjab-abk-backend#37`). Penambahan responden manual setelahnya (lihat
+    ``opm_tambah_responden``/``opm_tambah_responden_banyak``) tetap mensyaratkan
+    keanggotaan SME panel jabatan sesi ini.
 
     Args:
         sesi_id: UUID sesi OPM.
@@ -3168,14 +3197,18 @@ async def opm_analisis(ctx: Context, sesi_id: str) -> dict:
 async def opm_hasil(ctx: Context, sesi_id: str) -> dict:
     """Ambil hasil final OPM sesi yang sudah dianalisis.
 
-    Hasil ini spesifik untuk satu jabatan (satu sesi OPM). Untuk membandingkan
-    beberapa jabatan dalam studi yang sama, panggil ``opm_hasil`` per sesi.
+    Hasil ini spesifik untuk satu jabatan **pada satu cabang** (satu sesi OPM)
+    — respons memuat ``cabang`` (bisa ``null`` untuk sesi lama) untuk
+    membedakan hasil dua sesi jabatan yang sama pada cabang berbeda. Untuk
+    membandingkan beberapa jabatan/cabang dalam studi yang sama, panggil
+    ``opm_hasil`` per sesi.
 
     Args:
         sesi_id: UUID sesi OPM.
 
     Returns:
-        Hasil final OPM termasuk skor prioritas per task dan interpretasinya.
+        Hasil final OPM termasuk ``cabang``, skor prioritas per task, dan
+        interpretasinya.
     """
     try:
         return await backend_get(f"/api/v1/opm/sesi/{sesi_id}/hasil", ctx=ctx)
@@ -3188,11 +3221,15 @@ async def opm_kuesioner_saya(ctx: Context) -> list:
     """Ambil daftar kuesioner OPM yang di-assign ke saya (responden).
 
     Seorang partisipan bisa terdaftar sebagai responden di lebih dari satu
-    sesi OPM sekaligus (dinilai untuk beberapa jabatan) — hasil di sini bisa
-    mencakup penugasan dari beberapa sesi OPM (jabatan) berbeda.
+    sesi OPM sekaligus (dinilai untuk beberapa jabatan, atau jabatan yang sama
+    pada cabang berbeda) — hasil di sini bisa mencakup penugasan dari beberapa
+    sesi OPM berbeda. Tiap item memuat ``sesi_cabang`` (echo dari
+    ``OpmSesiRead.cabang``, bisa ``null``) untuk membedakan dua kartu kuesioner
+    jabatan yang sama pada cabang berbeda.
 
     Returns:
-        Daftar penugasan OPM milik pengguna terautentikasi.
+        Daftar penugasan OPM milik pengguna terautentikasi, termasuk
+        ``sesi_cabang`` per item.
     """
     try:
         return await backend_get("/api/v1/opm/kuesioner/saya", ctx=ctx)
@@ -3205,9 +3242,11 @@ async def hapus_opm_sesi(ctx: Context, sesi_id: str, paksa: bool = False) -> dic
     """Hapus sesi OPM berdasarkan ID.
 
     Sama seperti sesi TI, satu sesi OPM adalah satu analisis prioritas task
-    untuk satu jabatan — bukan sesi studi multi-partisipan. Satu studi
-    ANJAB/ABK biasanya memiliki banyak sesi OPM, satu per jabatan yang dikaji.
-    Menghapus sesi ini hanya menghapus analisis jabatan tersebut.
+    untuk satu jabatan **pada satu cabang** — bukan sesi studi multi-partisipan.
+    Satu jabatan bisa punya sesi OPM Bandung dan Semarang berdampingan; satu
+    studi ANJAB/ABK biasanya memiliki banyak sesi OPM, satu per kombinasi
+    jabatan+cabang yang dikaji. Menghapus sesi ini hanya menghapus analisis
+    jabatan+cabang tersebut — sesi OPM cabang lain (bila ada) tidak terpengaruh.
 
     **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila token
     bukan admin). Sesi berstatus DRAFT dapat dihapus langsung; sesi di status lain
@@ -3238,10 +3277,12 @@ async def opm_tambah_responden(
 ) -> dict:
     """Daftarkan satu responden OPM secara manual ke sesi (admin).
 
-    Sebagian besar anggota SME panel sudah otomatis jadi responden saat sesi
-    OPM dibuat (auto-populate) — tool ini untuk menambah anggota panel yang
-    bergabung SETELAH sesi dibuat. Partisipan wajib anggota SME panel jabatan
-    sesi ini; backend menolak (422) bila tidak.
+    Saat sesi OPM dibuat, auto-populate hanya mendaftarkan responden sesi Task
+    Inventory sumber yang SUDAH submit Tahap 1 (bukan seluruh anggota SME
+    panel — lihat ``opm_daftar_responden``) — tool ini untuk menambah anggota
+    panel lain secara manual, mis. yang belum submit Tahap 1 saat sesi OPM
+    dibuat atau bergabung SETELAHNYA. Partisipan tetap wajib anggota SME panel
+    jabatan sesi ini; backend menolak (422) bila tidak.
 
     Args:
         sesi_id: UUID sesi OPM.
@@ -3270,9 +3311,11 @@ async def opm_tambah_responden_banyak(
 
     Beda dari ``opm_tambah_responden`` (single, mewajibkan ``jabatan_label``
     manual), tool ini meresolusi ``nama``/``jabatan_label`` otomatis dari data
-    partisipan & jabatan sesi. Partisipan yang bukan anggota SME panel jabatan
-    sesi ini dilewati (bukan ditolak seluruhnya) dengan alasan
-    ``bukan_anggota_sme_panel`` di ``skipped``.
+    partisipan & jabatan sesi. Gunakan untuk melengkapi responden di luar
+    auto-populate saat sesi dibuat (yang hanya mengambil responden TI sumber
+    yang sudah submit Tahap 1 — lihat ``opm_daftar_responden``). Partisipan
+    yang bukan anggota SME panel jabatan sesi ini dilewati (bukan ditolak
+    seluruhnya) dengan alasan ``bukan_anggota_sme_panel`` di ``skipped``.
 
     Args:
         sesi_id: UUID sesi OPM.
