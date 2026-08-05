@@ -6,6 +6,8 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-08-05
+
 ### Diubah
 
 - **Docstring tool OPM diperbarui untuk sesi terpisah per jabatan+cabang**
