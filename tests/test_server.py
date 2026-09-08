@@ -1269,3 +1269,60 @@ async def test_buat_opm_sesi_parameter_tidak_bertambah_cabang():
         "catatan",
     }
     assert "cabang" not in parameter
+
+
+# ── Regresi structured_content: anotasi `-> list` polos (backlog #12) ──────
+#
+# FastMCP >=4 tidak menurunkan output schema untuk anotasi sequence tanpa
+# parameter (`-> list`), sehingga `structured_content`/`result.data` bernilai
+# `None` walau `result.content` (JSON teks) tetap terisi. Perbaikannya
+# mengganti anotasi jadi `-> list[dict]` di seluruh 11 tool yang terdampak.
+# Dua di antaranya (`opm_daftar_jawaban`, `opm_kuesioner_saya`) sudah diuji
+# lewat `call_tool` di atas — keempat test di bawah menembak empat tool
+# LAINNYA yang sebelumnya tak pernah ditembak `call_tool` sama sekali,
+# untuk membuktikan (bukan mengasumsikan) bahwa kerusakannya menyebar ke
+# tool-tool yang belum kebetulan diuji.
+
+
+@pytest.mark.asyncio
+async def test_ti_kuesioner_saya_structured_content():
+    payload = [{"id": "tirs-1", "sesi_id": "ti-1", "jabatan_id": "jab-1"}]
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("ti_kuesioner_saya", {})
+    assert result.data is not None
+    assert result.data[0]["sesi_id"] == "ti-1"
+    assert m.await_args.args[0] == "/api/v1/task-inventory/kuesioner/saya"
+
+
+@pytest.mark.asyncio
+async def test_dcs_kuesioner_saya_structured_content():
+    payload = [{"id": "dcsrs-1", "instrumen_status": "OPEN", "sudah_submit": False}]
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("dcs_kuesioner_saya", {})
+    assert result.data is not None
+    assert result.data[0]["instrumen_status"] == "OPEN"
+    assert m.await_args.args[0] == "/api/v1/dcs/kuesioner/saya"
+
+
+@pytest.mark.asyncio
+async def test_wcp_daftar_dimensi_structured_content():
+    payload = [{"kode": "D1", "nama": "Dimensi 1"}]
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("wcp_daftar_dimensi", {})
+    assert result.data is not None
+    assert result.data[0]["kode"] == "D1"
+    assert m.await_args.args[0] == "/api/v1/wcp/dimensi"
+
+
+@pytest.mark.asyncio
+async def test_ts_kuesioner_saya_structured_content():
+    payload = [{"id": "tsp-1", "status": "PENDING"}]
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("ts_kuesioner_saya", {})
+    assert result.data is not None
+    assert result.data[0]["status"] == "PENDING"
+    assert m.await_args.args[0] == "/api/v1/time-study/kuesioner/saya"

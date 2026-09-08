@@ -2233,7 +2233,7 @@ async def ti_submit_detail(ctx: Context, responden_id: str, detail: list[dict]) 
 
 
 @mcp.tool
-async def ti_kuesioner_saya(ctx: Context) -> list:
+async def ti_kuesioner_saya(ctx: Context) -> list[dict]:
     """Ambil daftar kuesioner Task Inventory yang di-assign ke saya (responden).
 
     Seorang partisipan bisa terdaftar sebagai responden di lebih dari satu
@@ -2295,7 +2295,7 @@ async def ti_catalog(
 
 
 @mcp.tool
-async def ti_catalog_kombinasi(ctx: Context) -> list:
+async def ti_catalog_kombinasi(ctx: Context) -> list[dict]:
     """Ambil daftar kombinasi unit × jabatan_id yang tersedia di katalog.
 
     Tiap kombinasi unit + jabatan_id menjadi kandidat untuk membuat satu sesi
@@ -2426,7 +2426,7 @@ async def dcs_submit_jawaban(ctx: Context, responden_id: str, jawaban: list[dict
 
 
 @mcp.tool
-async def dcs_daftar_jawaban(ctx: Context, responden_id: str) -> list:
+async def dcs_daftar_jawaban(ctx: Context, responden_id: str) -> list[dict]:
     """Ambil jawaban DCS yang sudah diisi seorang responden (instrumen singleton, tanpa sesi).
 
     Args:
@@ -2546,7 +2546,7 @@ async def dcs_hapus_item(ctx: Context, item_id: str) -> dict:
 
 
 @mcp.tool
-async def dcs_kuesioner_saya(ctx: Context) -> list:
+async def dcs_kuesioner_saya(ctx: Context) -> list[dict]:
     """Ambil daftar kuesioner DCS yang di-assign ke saya (responden) — instrumen singleton.
 
     Tidak ada sesi: tiap item memuat ``instrumen_status`` (OPEN | CLOSED |
@@ -2652,7 +2652,7 @@ async def wcp_submit_jawaban(ctx: Context, responden_id: str, jawaban: list[dict
 
 
 @mcp.tool
-async def wcp_daftar_jawaban(ctx: Context, responden_id: str) -> list:
+async def wcp_daftar_jawaban(ctx: Context, responden_id: str) -> list[dict]:
     """Ambil jawaban WCP yang sudah diisi seorang responden (instrumen singleton, tanpa sesi).
 
     Args:
@@ -2668,7 +2668,7 @@ async def wcp_daftar_jawaban(ctx: Context, responden_id: str) -> list:
 
 
 @mcp.tool
-async def wcp_daftar_dimensi(ctx: Context) -> list:
+async def wcp_daftar_dimensi(ctx: Context) -> list[dict]:
     """Ambil daftar dimensi WCP (master instrumen).
 
     Returns:
@@ -2697,7 +2697,7 @@ async def wcp_detail_dimensi(ctx: Context, kode: str) -> dict:
 
 
 @mcp.tool
-async def wcp_dimensi_items(ctx: Context, kode: str) -> list:
+async def wcp_dimensi_items(ctx: Context, kode: str) -> list[dict]:
     """Ambil daftar item pernyataan pada sebuah dimensi WCP.
 
     Args:
@@ -2772,7 +2772,7 @@ async def wcp_hapus_item(ctx: Context, item_id: str) -> dict:
 
 
 @mcp.tool
-async def wcp_kuesioner_saya(ctx: Context) -> list:
+async def wcp_kuesioner_saya(ctx: Context) -> list[dict]:
     """Ambil daftar kuesioner WCP yang di-assign ke saya (responden) — instrumen singleton.
 
     Tidak ada sesi: tiap item memuat ``instrumen_status`` (OPEN | CLOSED |
@@ -3157,7 +3157,7 @@ async def opm_submit_jawaban(ctx: Context, responden_id: str, jawaban: list[dict
 
 
 @mcp.tool
-async def opm_daftar_jawaban(ctx: Context, responden_id: str) -> list:
+async def opm_daftar_jawaban(ctx: Context, responden_id: str) -> list[dict]:
     """Ambil jawaban OPM yang sudah diisi seorang responden.
 
     Args:
@@ -3217,7 +3217,7 @@ async def opm_hasil(ctx: Context, sesi_id: str) -> dict:
 
 
 @mcp.tool
-async def opm_kuesioner_saya(ctx: Context) -> list:
+async def opm_kuesioner_saya(ctx: Context) -> list[dict]:
     """Ambil daftar kuesioner OPM yang di-assign ke saya (responden).
 
     Seorang partisipan bisa terdaftar sebagai responden di lebih dari satu
@@ -3683,7 +3683,7 @@ async def ts_perbarui_log(
 
 
 @mcp.tool
-async def ts_kuesioner_saya(ctx: Context) -> list:
+async def ts_kuesioner_saya(ctx: Context) -> list[dict]:
     """Ambil daftar kuesioner Time Study yang di-assign ke saya (responden).
 
     Returns:

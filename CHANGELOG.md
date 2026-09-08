@@ -6,6 +6,23 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Diperbaiki
+
+- **`structured_content`/`result.data` kosong (`None`) pada 11 tool** yang
+  beranotasi kembalian `-> list` polos (`ti_kuesioner_saya`,
+  `ti_catalog_kombinasi`, `dcs_daftar_jawaban`, `dcs_kuesioner_saya`,
+  `wcp_daftar_jawaban`, `wcp_daftar_dimensi`, `wcp_dimensi_items`,
+  `wcp_kuesioner_saya`, `opm_daftar_jawaban`, `opm_kuesioner_saya`,
+  `ts_kuesioner_saya`). Penyebab: FastMCP ≥4 sengaja tidak menurunkan output
+  schema untuk anotasi sequence tanpa parameter. Anotasi diganti
+  `-> list[dict]` — bentuk data yang dikembalikan tiap tool ke pemanggil
+  tidak berubah, hanya skema keluarannya yang pulih.
+
+### Diubah
+
+- Batas atas versi `fastmcp` dipin: `fastmcp>=4.0.0,<5.0.0` (sebelumnya
+  `>=2.0.0` tanpa batas atas, sehingga drift versi bisa merusak diam-diam).
+
 ## [0.17.1] - 2026-08-05
 
 ### Diubah
