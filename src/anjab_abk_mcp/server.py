@@ -155,6 +155,7 @@ async def buat_sekolah(
     npsn: str | None = None,
     kota: str | None = None,
     provinsi: str | None = None,
+    cabang: Literal["Bandung", "Semarang"] | None = None,
 ) -> dict:
     """Buat data sekolah (satuan pendidikan) baru.
 
@@ -164,6 +165,10 @@ async def buat_sekolah(
         npsn: Nomor Pokok Sekolah Nasional (opsional).
         kota: Nama kota lokasi sekolah (opsional).
         provinsi: Nama provinsi lokasi sekolah (opsional).
+        cabang: Cabang lokasi sekolah — salah satu dari ``"Bandung"`` atau
+            ``"Semarang"`` (opsional). Ini satu-satunya penanda cabang yang
+            tersimpan untuk sekolah; partisipan/jabatan tidak punya cabang
+            sendiri, melainkan mewarisi dari sekolahnya.
 
     Returns:
         Data sekolah yang baru dibuat termasuk ``id`` (UUID).
@@ -178,6 +183,8 @@ async def buat_sekolah(
         body["kota"] = kota
     if provinsi is not None:
         body["provinsi"] = provinsi
+    if cabang is not None:
+        body["cabang"] = cabang
     try:
         return await backend_post("/api/v1/sekolah", ctx=ctx, body=body)
     except BackendError as exc:
@@ -1265,6 +1272,7 @@ async def perbarui_sekolah(
     jenjang_pendidikan_id: str | None = None,
     kota: str | None = None,
     provinsi: str | None = None,
+    cabang: Literal["Bandung", "Semarang"] | None = None,
     aktif: bool | None = None,
 ) -> dict:
     """Perbarui sebagian field sekolah.
@@ -1276,6 +1284,10 @@ async def perbarui_sekolah(
         jenjang_pendidikan_id: UUID jenjang baru (opsional).
         kota: Kota baru (opsional).
         provinsi: Provinsi baru (opsional).
+        cabang: Cabang baru — salah satu dari ``"Bandung"`` atau ``"Semarang"``
+            (opsional). Seperti parameter lain tool ini, ``None`` berarti
+            "tidak diubah", bukan "kosongkan" — mengosongkan kembali cabang
+            yang sudah tersimpan tidak dapat dilakukan lewat tool ini.
         aktif: Status aktif baru (opsional).
 
     Returns:
@@ -1292,6 +1304,8 @@ async def perbarui_sekolah(
         body["kota"] = kota
     if provinsi is not None:
         body["provinsi"] = provinsi
+    if cabang is not None:
+        body["cabang"] = cabang
     if aktif is not None:
         body["aktif"] = aktif
     try:

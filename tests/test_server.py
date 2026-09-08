@@ -66,6 +66,20 @@ async def test_daftar_sekolah():
 
 
 @pytest.mark.asyncio
+async def test_daftar_sekolah_meneruskan_cabang_dari_backend():
+    """Tool baca sekolah meneruskan respons backend apa adanya (tanpa proyeksi
+    field eksplisit) — cabang yang dikirim backend harus ikut terbawa."""
+    payload = {
+        "items": [{"id": "uuid-s", "nama": "SDN 01 Contoh", "cabang": "Bandung"}],
+        "total": 1,
+    }
+    with patch(_GET, new_callable=AsyncMock, return_value=payload):
+        async with Client(mcp) as client:
+            result = await client.call_tool("daftar_sekolah", {})
+    assert result.data["items"][0]["cabang"] == "Bandung"
+
+
+@pytest.mark.asyncio
 async def test_buat_sekolah():
     payload = {"id": "uuid-baru", "nama": "SMP Teladan", "jenjang_pendidikan_id": "uuid-smp"}
     with patch(_POST, new_callable=AsyncMock, return_value=payload):
@@ -75,6 +89,60 @@ async def test_buat_sekolah():
                 {"nama": "SMP Teladan", "jenjang_pendidikan_id": "uuid-smp"},
             )
     assert result.data["id"] == "uuid-baru"
+
+
+@pytest.mark.asyncio
+async def test_buat_sekolah_tanpa_cabang_tidak_kirim_field():
+    """Perilaku lama utuh: tanpa cabang, payload create tidak memuat kunci itu."""
+    payload = {"id": "uuid-baru", "nama": "SMP Teladan", "jenjang_pendidikan_id": "uuid-smp"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            await client.call_tool(
+                "buat_sekolah",
+                {"nama": "SMP Teladan", "jenjang_pendidikan_id": "uuid-smp"},
+            )
+    body = m.await_args.kwargs["body"]
+    assert "cabang" not in body
+
+
+@pytest.mark.asyncio
+async def test_buat_sekolah_dengan_cabang():
+    payload = {"id": "uuid-baru", "nama": "SMP Teladan", "cabang": "Bandung"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "buat_sekolah",
+                {
+                    "nama": "SMP Teladan",
+                    "jenjang_pendidikan_id": "uuid-smp",
+                    "cabang": "Bandung",
+                },
+            )
+    assert result.data["cabang"] == "Bandung"
+    body = m.await_args.kwargs["body"]
+    assert body == {
+        "nama": "SMP Teladan",
+        "jenjang_pendidikan_id": "uuid-smp",
+        "cabang": "Bandung",
+    }
+
+
+@pytest.mark.asyncio
+async def test_buat_sekolah_cabang_invalid_ditolak():
+    """cabang di luar {Bandung, Semarang} ditolak validasi input (Literal) — tak
+    pernah sampai ke backend."""
+    with patch(_POST, new_callable=AsyncMock) as m:
+        async with Client(mcp) as client:
+            with pytest.raises(Exception):
+                await client.call_tool(
+                    "buat_sekolah",
+                    {
+                        "nama": "SMP Teladan",
+                        "jenjang_pendidikan_id": "uuid-smp",
+                        "cabang": "Surabaya",
+                    },
+                )
+    m.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -877,6 +945,42 @@ async def test_perbarui_sekolah_hanya_field_terisi():
             await client.call_tool("perbarui_sekolah", {"sekolah_id": "s1", "kota": "Semarang"})
     body = m.await_args.kwargs["body"]
     assert body == {"kota": "Semarang"}
+
+
+@pytest.mark.asyncio
+async def test_perbarui_sekolah_dengan_cabang():
+    payload = {"id": "s1", "cabang": "Semarang"}
+    with patch(_PATCH, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "perbarui_sekolah", {"sekolah_id": "s1", "cabang": "Semarang"}
+            )
+    assert result.data["cabang"] == "Semarang"
+    body = m.await_args.kwargs["body"]
+    assert body == {"cabang": "Semarang"}
+
+
+@pytest.mark.asyncio
+async def test_perbarui_sekolah_tanpa_cabang_tidak_kirim_field():
+    """cabang=None berarti 'tidak diubah' — konsisten dengan parameter lain tool ini."""
+    with patch(_PATCH, new_callable=AsyncMock, return_value={"id": "s1"}) as m:
+        async with Client(mcp) as client:
+            await client.call_tool("perbarui_sekolah", {"sekolah_id": "s1", "kota": "Bandung"})
+    body = m.await_args.kwargs["body"]
+    assert "cabang" not in body
+
+
+@pytest.mark.asyncio
+async def test_perbarui_sekolah_cabang_invalid_ditolak():
+    """cabang di luar {Bandung, Semarang} ditolak validasi input (Literal) — tak
+    pernah sampai ke backend."""
+    with patch(_PATCH, new_callable=AsyncMock) as m:
+        async with Client(mcp) as client:
+            with pytest.raises(Exception):
+                await client.call_tool(
+                    "perbarui_sekolah", {"sekolah_id": "s1", "cabang": "Surabaya"}
+                )
+    m.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -6,6 +6,16 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Ditambahkan
+
+- **Parameter `cabang` pada `buat_sekolah` dan `perbarui_sekolah`** —
+  `Literal["Bandung", "Semarang"] | None`, opsional. Pada `perbarui_sekolah`,
+  `None` berarti "tidak diubah" (konsisten dengan parameter lain tool itu).
+  Nilai di luar enum ditolak sebagai galat validasi di sisi klien, tidak
+  pernah diteruskan ke backend. Tool baca sekolah (`daftar_sekolah`,
+  `cari_sekolah`, `detail_sekolah`) tidak perlu diubah — ketiganya meneruskan
+  respons backend apa adanya sehingga `cabang` otomatis ikut terbawa.
+
 ### Diperbaiki
 
 - **`structured_content`/`result.data` kosong (`None`) pada 11 tool** yang
