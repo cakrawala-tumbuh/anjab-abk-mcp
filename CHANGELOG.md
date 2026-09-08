@@ -6,6 +6,8 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-09
+
 ### Ditambahkan
 
 - **Parameter `cabang` pada `buat_sekolah` dan `perbarui_sekolah`** —
@@ -32,6 +34,15 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 - Batas atas versi `fastmcp` dipin: `fastmcp>=4.0.0,<5.0.0` (sebelumnya
   `>=2.0.0` tanpa batas atas, sehingga drift versi bisa merusak diam-diam).
+- **`uv.lock` diselaraskan dengan pin baru** — lock masih mengunci
+  `fastmcp 3.4.2` sementara `pyproject.toml` sudah menuntut `>=4.0.0`, sehingga
+  keduanya bertentangan. CI tidak menangkapnya karena `Dockerfile.test`
+  memasang lewat `pip install .` dari `pyproject.toml` dan mengabaikan lock —
+  akibatnya CI menguji 4.x sementara setiap lingkungan dev menjalankan 3.4.2.
+  Lock kini `fastmcp 4.0.3` (ikut menaikkan `mcp` 1.28.0 → 2.2.0).
+- **`__version__` dinaikkan ke `0.18.0`**, menutup drift yang tertinggal sejak
+  rilis `v0.17.1` (tag naik, `src/anjab_abk_mcp/__init__.py` tidak ikut naik
+  sehingga tetap `0.17.0`).
 
 ## [0.17.1] - 2026-08-05
 
