@@ -6,6 +6,8 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-25
+
 ### Ditambahkan
 
 - **Tool `ti_alihkan_responden` dan `opm_alihkan_responden`** — memindahkan
