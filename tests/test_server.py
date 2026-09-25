@@ -36,6 +36,8 @@ async def test_tools_terdaftar():
     assert "daftar_ts_penugasan" in names
     assert "buat_ts_penugasan_banyak" in names
     assert "ti_tambah_responden_banyak" in names
+    assert "ti_alihkan_responden" in names
+    assert "opm_alihkan_responden" in names
     assert "opm_tambah_responden" in names
     assert "opm_tambah_responden_banyak" in names
     assert "buat_opm_sesi" in names
@@ -216,6 +218,65 @@ async def test_ti_tambah_responden_banyak():
     assert len(result.data["created"]) == 2
     assert m.await_args.args[0] == "/api/v1/task-inventory/sesi/uuid-sesi/responden/bulk"
     assert m.await_args.kwargs["body"] == {"partisipan_ids": ["p1", "p2"]}
+
+
+@pytest.mark.asyncio
+async def test_ti_alihkan_responden():
+    payload = {"id": "trsp-1", "partisipan_id": "par-baru", "nama": "Partisipan Baru"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "ti_alihkan_responden",
+                {
+                    "responden_id": "trsp-1",
+                    "dari_partisipan_id": "par-lama",
+                    "ke_partisipan_id": "par-baru",
+                },
+            )
+    assert result.data["partisipan_id"] == "par-baru"
+    assert m.await_args.args[0] == "/api/v1/task-inventory/sesi/responden/trsp-1/alihkan"
+    assert m.await_args.kwargs["body"] == {
+        "dari_partisipan_id": "par-lama",
+        "ke_partisipan_id": "par-baru",
+    }
+
+
+@pytest.mark.asyncio
+async def test_ti_alihkan_responden_backend_error_jadi_tool_error():
+    """BackendError (mis. 409 sudah jadi responden) diubah jadi ToolError, bukan traceback."""
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with patch(
+        _POST,
+        new_callable=AsyncMock,
+        side_effect=BackendError("Backend error 409: sudah responden di sesi ini"),
+    ):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool(
+                    "ti_alihkan_responden",
+                    {
+                        "responden_id": "trsp-1",
+                        "dari_partisipan_id": "par-lama",
+                        "ke_partisipan_id": "par-baru",
+                    },
+                )
+    teks = str(exc_info.value)
+    assert "Traceback" not in teks
+    assert "409" in teks
+
+
+@pytest.mark.asyncio
+async def test_ti_alihkan_responden_tanpa_dari_partisipan_id_raise():
+    """Wajib error bila dari_partisipan_id tidak diisi (guard anti-timpa diam-diam)."""
+    async with Client(mcp) as client:
+        with pytest.raises(Exception):
+            await client.call_tool(
+                "ti_alihkan_responden",
+                {"responden_id": "trsp-1", "ke_partisipan_id": "par-baru"},
+            )
 
 
 @pytest.mark.asyncio
@@ -589,6 +650,38 @@ async def test_opm_hapus_responden():
             result = await client.call_tool("opm_hapus_responden", {"responden_id": "r1"})
     assert result.data["ok"] is True
     assert "/api/v1/opm/sesi/responden/r1" in m.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_opm_alihkan_responden():
+    payload = {"id": "oprs-1", "partisipan_id": "par-baru", "nama": "Partisipan Baru"}
+    with patch(_POST, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "opm_alihkan_responden",
+                {
+                    "responden_id": "oprs-1",
+                    "dari_partisipan_id": "par-lama",
+                    "ke_partisipan_id": "par-baru",
+                },
+            )
+    assert result.data["partisipan_id"] == "par-baru"
+    assert m.await_args.args[0] == "/api/v1/opm/sesi/responden/oprs-1/alihkan"
+    assert m.await_args.kwargs["body"] == {
+        "dari_partisipan_id": "par-lama",
+        "ke_partisipan_id": "par-baru",
+    }
+
+
+@pytest.mark.asyncio
+async def test_opm_alihkan_responden_tanpa_dari_partisipan_id_raise():
+    """Wajib error bila dari_partisipan_id tidak diisi (guard anti-timpa diam-diam)."""
+    async with Client(mcp) as client:
+        with pytest.raises(Exception):
+            await client.call_tool(
+                "opm_alihkan_responden",
+                {"responden_id": "oprs-1", "ke_partisipan_id": "par-baru"},
+            )
 
 
 @pytest.mark.asyncio

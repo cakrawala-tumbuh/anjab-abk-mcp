@@ -2086,6 +2086,48 @@ async def ti_hapus_responden(ctx: Context, responden_id: str) -> dict:
 
 
 @mcp.tool
+async def ti_alihkan_responden(
+    ctx: Context, responden_id: str, dari_partisipan_id: str, ke_partisipan_id: str
+) -> dict:
+    """Alihkan kepemilikan responden Task Inventory ke partisipan lain.
+
+    Mengubah HANYA ``partisipan_id`` (dan ``nama``) pada baris responden —
+    seluruh jawaban serta status & timestamp kirim (``tahap1_submit`` dkk.)
+    ikut pindah apa adanya, bukan disalin ulang. Berlaku juga untuk sesi TI
+    yang sudah berstatus TAHAP3.
+
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila
+    token bukan admin). ``dari_partisipan_id`` wajib diisi eksplisit sebagai
+    guard agar tool tidak menimpa pemilik responden secara diam-diam.
+
+    Args:
+        responden_id: UUID responden TI yang dialihkan.
+        dari_partisipan_id: UUID partisipan pemilik responden saat ini.
+            Ditolak (422) bila responden ternyata bukan milik partisipan
+            ini — pesan error backend menyebut pemilik aktualnya.
+        ke_partisipan_id: UUID partisipan tujuan. Ditolak 404 bila
+            responden/partisipan tujuan tak ada, 422 bila partisipan tujuan
+            nonaktif atau sama dengan ``dari_partisipan_id``, 409 bila
+            partisipan tujuan sudah menjadi responden lain di sesi yang sama.
+
+    Returns:
+        Data responden TI setelah pengalihan — ``partisipan_id``/``nama``
+        sudah berganti, jawaban & status kirim tetap utuh.
+    """
+    try:
+        return await backend_post(
+            f"/api/v1/task-inventory/sesi/responden/{responden_id}/alihkan",
+            ctx=ctx,
+            body={
+                "dari_partisipan_id": dari_partisipan_id,
+                "ke_partisipan_id": ke_partisipan_id,
+            },
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
 async def ti_seleksi_responden(ctx: Context, responden_id: str) -> dict:
     """Ambil seleksi task (Tahap 1) milik responden.
 
@@ -3368,6 +3410,48 @@ async def opm_hapus_responden(ctx: Context, responden_id: str) -> dict:
     """
     try:
         return await backend_delete(f"/api/v1/opm/sesi/responden/{responden_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def opm_alihkan_responden(
+    ctx: Context, responden_id: str, dari_partisipan_id: str, ke_partisipan_id: str
+) -> dict:
+    """Alihkan kepemilikan responden OPM ke partisipan lain.
+
+    Mengubah HANYA ``partisipan_id`` (dan ``nama``) pada baris responden —
+    seluruh jawaban serta status & timestamp kirim (``sudah_submit`` dkk.)
+    ikut pindah apa adanya, bukan disalin ulang. Berlaku juga untuk sesi OPM
+    yang kuota respondennya sudah penuh.
+
+    **Hanya dapat dijalankan oleh admin** (backend menolak dengan 403 bila
+    token bukan admin). ``dari_partisipan_id`` wajib diisi eksplisit sebagai
+    guard agar tool tidak menimpa pemilik responden secara diam-diam.
+
+    Args:
+        responden_id: UUID responden OPM yang dialihkan.
+        dari_partisipan_id: UUID partisipan pemilik responden saat ini.
+            Ditolak (422) bila responden ternyata bukan milik partisipan
+            ini — pesan error backend menyebut pemilik aktualnya.
+        ke_partisipan_id: UUID partisipan tujuan. Ditolak 404 bila
+            responden/partisipan tujuan tak ada, 422 bila partisipan tujuan
+            nonaktif atau sama dengan ``dari_partisipan_id``, 409 bila
+            partisipan tujuan sudah menjadi responden lain di sesi yang sama.
+
+    Returns:
+        Data responden OPM setelah pengalihan — ``partisipan_id``/``nama``
+        sudah berganti, jawaban & status kirim tetap utuh.
+    """
+    try:
+        return await backend_post(
+            f"/api/v1/opm/sesi/responden/{responden_id}/alihkan",
+            ctx=ctx,
+            body={
+                "dari_partisipan_id": dari_partisipan_id,
+                "ke_partisipan_id": ke_partisipan_id,
+            },
+        )
     except BackendError as exc:
         _raise_tool_error(exc)
 

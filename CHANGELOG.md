@@ -6,6 +6,17 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Ditambahkan
+
+- **Tool `ti_alihkan_responden` dan `opm_alihkan_responden`** — memindahkan
+  kepemilikan responden TI/OPM (termasuk jawaban serta status & timestamp
+  kirim) dari satu partisipan ke partisipan lain, tanpa perlu hapus dan isi
+  ulang. Admin-only; `dari_partisipan_id` wajib diisi eksplisit sebagai guard
+  anti-timpa diam-diam. Memanggil endpoint backend
+  `POST …/task-inventory/sesi/responden/{id}/alihkan` dan
+  `POST …/opm/sesi/responden/{id}/alihkan`
+  (`cakrawala-tumbuh/anjab-abk-backend#47`).
+
 ## [0.18.0] - 2026-09-09
 
 ### Ditambahkan
