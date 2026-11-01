@@ -6,6 +6,8 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-01
+
 ### Ditambahkan
 
 - **4 tool tulis penilaian & prioritas final domain `redesain_*`** untuk Tim
