@@ -5006,3 +5006,231 @@ async def redesain_perbarui_bukti(
         return await backend_patch(f"/api/v1/redesain/bukti/{bukti_id}", ctx=ctx, body=body)
     except BackendError as exc:
         _raise_tool_error(exc)
+
+
+# ── Domain REDESAIN (tool TULIS penilaian & prioritas final, tim-kajian) ──────
+
+StatusBukti = Literal[
+    "Hipotesis",
+    "Keterangan kasus",
+    "Diperkuat untuk klaim",
+    "Diperselisihkan",
+    "Belum cukup",
+]
+Indikasi = Literal["Ada indikasi", "Tidak terlihat", "Belum tahu"]
+Skala = Literal["Tinggi", "Sedang", "Rendah", "Belum tahu"]
+PrioritasFinal = Literal[
+    "P0 - Eskalasi", "K - Klarifikasi", "P1 - Utama", "P2 - Berikutnya", "P3 - Pantau", "Ditunda"
+]
+StatusPenilaianManual = Literal[
+    "Belum ditelaah", "Perlu klarifikasi", "Siap untuk telaah yayasan", "Ditunda"
+]
+
+
+@mcp.tool
+async def redesain_buat_penilaian(
+    ctx: Context,
+    masalah_id: str,
+    status_bukti: StatusBukti,
+    gap_material: YaTidak,
+    indikasi_kritis: Indikasi,
+    k1: Skala | None = None,
+    k2: Skala | None = None,
+    k3: Skala | None = None,
+    k4: Skala | None = None,
+    alasan_rentang_beda: str | None = None,
+    diluruskan_sekolah: str | None = None,
+    pemeriksa_sekolah_konteks: str | None = None,
+    tindak_lanjut: str | None = None,
+    catatan_sumber_versi: str | None = None,
+) -> dict:
+    """Buat penilaian untuk satu masalah redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403). Satu
+    masalah hanya boleh punya satu penilaian (409 bila sudah ada). K1-K4
+    diisi Tim Kajian sendiri, bukan agregat konfirmasi sekolah.
+    ``saran_otomatis`` dan ``versi_aturan_triase`` dihitung backend dan tidak
+    dapat diisi. Isian bebas DILARANG memuat identitas atau isi kasus murid,
+    keluarga, diagnosis, maupun konseling.
+
+    Args:
+        masalah_id: UUID masalah yang dinilai.
+        status_bukti: Status dengan bukti.
+        gap_material: Apakah gap masih material.
+        indikasi_kritis: Indikasi risiko kritis.
+        k1: Skala kriteria K1.
+        k2: Skala kriteria K2.
+        k3: Skala kriteria K3.
+        k4: Skala kriteria K4.
+        alasan_rentang_beda: Alasan bila rentang penilaian berbeda.
+        diluruskan_sekolah: Ringkasan Tim: apa yang telah diluruskan sekolah.
+        pemeriksa_sekolah_konteks: Pemeriksa sekolah/konteks.
+        tindak_lanjut: Tindak lanjut yang direncanakan.
+        catatan_sumber_versi: Catatan sumber dan versi.
+
+    Returns:
+        Penilaian yang dibuat apa adanya dari backend, termasuk
+        ``saran_otomatis`` dan daftar ``peringatan`` bila ada. 422 bila
+        masalah tak dikenal.
+    """
+    body = _tanpa_none(
+        masalah_id=masalah_id,
+        status_bukti=status_bukti,
+        gap_material=gap_material,
+        indikasi_kritis=indikasi_kritis,
+        k1=k1,
+        k2=k2,
+        k3=k3,
+        k4=k4,
+        alasan_rentang_beda=alasan_rentang_beda,
+        diluruskan_sekolah=diluruskan_sekolah,
+        pemeriksa_sekolah_konteks=pemeriksa_sekolah_konteks,
+        tindak_lanjut=tindak_lanjut,
+        catatan_sumber_versi=catatan_sumber_versi,
+    )
+    try:
+        return await backend_post("/api/v1/redesain/penilaian", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_perbarui_penilaian(
+    ctx: Context,
+    penilaian_id: str,
+    status_bukti: StatusBukti | None = None,
+    gap_material: YaTidak | None = None,
+    indikasi_kritis: Indikasi | None = None,
+    k1: Skala | None = None,
+    k2: Skala | None = None,
+    k3: Skala | None = None,
+    k4: Skala | None = None,
+    alasan_rentang_beda: str | None = None,
+    diluruskan_sekolah: str | None = None,
+    pemeriksa_sekolah_konteks: str | None = None,
+    tindak_lanjut: str | None = None,
+    catatan_sumber_versi: str | None = None,
+) -> dict:
+    """Perbarui sebagian field satu penilaian redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404). Hanya field yang diberikan (bukan ``None``) yang dikirim;
+    mengosongkan K1-K4 ke ``null`` tidak didukung. ``masalah_id``,
+    ``saran_otomatis`` dan ``versi_aturan_triase`` tidak dapat diubah.
+
+    Args:
+        penilaian_id: UUID penilaian yang diubah.
+        status_bukti: Status dengan bukti baru.
+        gap_material: Gap material baru.
+        indikasi_kritis: Indikasi risiko kritis baru.
+        k1: Skala K1 baru.
+        k2: Skala K2 baru.
+        k3: Skala K3 baru.
+        k4: Skala K4 baru.
+        alasan_rentang_beda: Alasan rentang beda baru.
+        diluruskan_sekolah: Ringkasan yang diluruskan sekolah.
+        pemeriksa_sekolah_konteks: Pemeriksa sekolah/konteks.
+        tindak_lanjut: Tindak lanjut.
+        catatan_sumber_versi: Catatan sumber dan versi.
+
+    Returns:
+        Penilaian setelah diperbarui apa adanya dari backend (termasuk
+        ``peringatan`` bila ada).
+    """
+    body = _tanpa_none(
+        status_bukti=status_bukti,
+        gap_material=gap_material,
+        indikasi_kritis=indikasi_kritis,
+        k1=k1,
+        k2=k2,
+        k3=k3,
+        k4=k4,
+        alasan_rentang_beda=alasan_rentang_beda,
+        diluruskan_sekolah=diluruskan_sekolah,
+        pemeriksa_sekolah_konteks=pemeriksa_sekolah_konteks,
+        tindak_lanjut=tindak_lanjut,
+        catatan_sumber_versi=catatan_sumber_versi,
+    )
+    try:
+        return await backend_patch(f"/api/v1/redesain/penilaian/{penilaian_id}", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_putuskan_prioritas(
+    ctx: Context,
+    penilaian_id: str,
+    prioritas_final: PrioritasFinal,
+    alasan_final: str,
+    pemutus_kode_orang: str,
+    pemutus_jabatan: str,
+    tanggal_keputusan: str,
+) -> dict:
+    """Catat prioritas final satu penilaian atas keputusan pemutus.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404). Keputusan dicatat Tim Kajian atas nama pemutus; yayasan tidak
+    menginput. Alasan SELALU wajib, baik sama maupun beda dari
+    ``saran_otomatis`` (kosong atau hanya spasi ditolak 422). Pemutus hanya
+    dirujuk lewat kode orang dan jabatan, bukan nama. Tool ini boleh
+    dipanggil ulang; riwayat backend mencatat tiap keputusan.
+
+    PENTING: bila respons memuat ``peringatan`` (mis.
+    ``PRIORITAS_TANPA_BUKTI``: hipotesis/belum berbukti mendapat P1-P3, atau
+    ``BERBEDA_DARI_SARAN``), sampaikan seluruhnya kepada pengguna. Peringatan
+    bukan pemblokir; keputusan tetap tersimpan.
+
+    Args:
+        penilaian_id: UUID penilaian.
+        prioritas_final: Prioritas final yang diputuskan.
+        alasan_final: Alasan keputusan (wajib, tidak boleh kosong).
+        pemutus_kode_orang: Kode orang pemutus (pseudonim; 422 bila tak dikenal).
+        pemutus_jabatan: Jabatan pemutus.
+        tanggal_keputusan: Tanggal keputusan format ``YYYY-MM-DD`` (tidak di masa depan).
+
+    Returns:
+        Penilaian setelah diputuskan apa adanya dari backend, termasuk
+        ``peringatan`` utuh dan tidak disaring.
+    """
+    body = {
+        "prioritas_final": prioritas_final,
+        "alasan_final": alasan_final,
+        "pemutus_kode_orang": pemutus_kode_orang,
+        "pemutus_jabatan": pemutus_jabatan,
+        "tanggal_keputusan": tanggal_keputusan,
+    }
+    try:
+        return await backend_post(
+            f"/api/v1/redesain/penilaian/{penilaian_id}/putuskan", ctx=ctx, body=body
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_status_penilaian(
+    ctx: Context, penilaian_id: str, status_penilaian: StatusPenilaianManual
+) -> dict:
+    """Ubah status alur satu penilaian redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404). Status ``Telah diputuskan`` sengaja tidak tersedia di sini:
+    status itu hanya ditetapkan lewat ``redesain_putuskan_prioritas``.
+
+    Args:
+        penilaian_id: UUID penilaian.
+        status_penilaian: Status baru: ``Belum ditelaah``, ``Perlu klarifikasi``,
+            ``Siap untuk telaah yayasan``, atau ``Ditunda``.
+
+    Returns:
+        Penilaian setelah status diubah, apa adanya dari backend.
+    """
+    try:
+        return await backend_post(
+            f"/api/v1/redesain/penilaian/{penilaian_id}/status",
+            ctx=ctx,
+            body={"status_penilaian": status_penilaian},
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)

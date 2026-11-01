@@ -8,6 +8,12 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Ditambahkan
 
+- **4 tool tulis penilaian & prioritas final domain `redesain_*`** untuk Tim
+  Kajian: `redesain_buat_penilaian`, `redesain_perbarui_penilaian`,
+  `redesain_putuskan_prioritas` (alasan selalu wajib; pemutus hanya kode orang +
+  jabatan; peringatan backend dikembalikan utuh), `redesain_status_penilaian`
+  (`Telah diputuskan` hanya lewat `putuskan`)
+  (`cakrawala-tumbuh/anjab-abk-mcp#18`).
 - **7 tool tulis domain `redesain_*`** untuk Tim Kajian: `redesain_buat_masalah`,
   `redesain_perbarui_masalah`, `redesain_status_konfirmasi_masalah` (buka/tutup
   untuk konfirmasi), `redesain_cari_bukti`, `redesain_detail_bukti`,

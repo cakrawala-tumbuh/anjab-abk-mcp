@@ -1548,11 +1548,11 @@ _PATH_TERLARANG = ("/kode-orang", "/konfirmasi", "/sekolah/", "/ekspor/")
 
 @pytest.mark.asyncio
 async def test_redesain_himpunan_tool_tertutup():
-    """Penjaga identitas: daftar tool redesain_* harus persis 17 nama yang disepakati."""
+    """Penjaga identitas: daftar tool redesain_* harus persis 21 nama yang disepakati."""
     async with Client(mcp) as client:
         tools = await client.list_tools()
     names = {t.name for t in tools if t.name.startswith("redesain_")}
-    assert names == set(_REDESAIN_TOOLS) | set(_REDESAIN_TULIS)
+    assert names == set(_REDESAIN_TOOLS) | set(_REDESAIN_TULIS) | set(_REDESAIN_PENILAIAN)
 
 
 @pytest.mark.asyncio
@@ -1783,3 +1783,116 @@ async def test_redesain_tulis_tanpa_path_terlarang_dan_parameter_identitas():
         # "/status-konfirmasi" sah (buka/tutup); yang dilarang path konfirmasi per orang.
         assert not any(t in path for t in ("/kode-orang", "/sekolah/", "/ekspor/")), path
         assert "/konfirmasi" not in path.replace("/status-konfirmasi", ""), path
+
+
+# ── Domain REDESAIN (tool tulis penilaian & prioritas final, tim-kajian) ──────
+_PENILAIAN_BARU = {
+    "masalah_id": "m1",
+    "status_bukti": "Hipotesis",
+    "gap_material": "Ya",
+    "indikasi_kritis": "Belum tahu",
+}
+_PUTUSAN = {
+    "penilaian_id": "p1",
+    "prioritas_final": "P1 - Utama",
+    "alasan_final": "alasan",
+    "pemutus_kode_orang": "KO-01",
+    "pemutus_jabatan": "Ketua Tim",
+    "tanggal_keputusan": "2026-10-01",
+}
+_REDESAIN_PENILAIAN = {
+    # nama: (patch target, path, argumen, body)
+    "redesain_buat_penilaian": (
+        _POST,
+        "/api/v1/redesain/penilaian",
+        _PENILAIAN_BARU,
+        _PENILAIAN_BARU,
+    ),
+    "redesain_perbarui_penilaian": (
+        _PATCH,
+        "/api/v1/redesain/penilaian/p1",
+        {"penilaian_id": "p1", "k1": "Tinggi"},
+        {"k1": "Tinggi"},
+    ),
+    "redesain_putuskan_prioritas": (
+        _POST,
+        "/api/v1/redesain/penilaian/p1/putuskan",
+        _PUTUSAN,
+        {k: v for k, v in _PUTUSAN.items() if k != "penilaian_id"},
+    ),
+    "redesain_status_penilaian": (
+        _POST,
+        "/api/v1/redesain/penilaian/p1/status",
+        {"penilaian_id": "p1", "status_penilaian": "Ditunda"},
+        {"status_penilaian": "Ditunda"},
+    ),
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nama", sorted(_REDESAIN_PENILAIAN))
+async def test_redesain_penilaian_method_path_dan_body(nama):
+    target, path, args, body = _REDESAIN_PENILAIAN[nama]
+    payload = {"id": "x"}
+    with patch(target, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(nama, args)
+    assert result.data == payload
+    assert m.call_args.args[0] == path
+    assert m.call_args.kwargs["body"] == body
+
+
+@pytest.mark.asyncio
+async def test_redesain_putuskan_peringatan_dikembalikan_utuh():
+    payload = {
+        "id": "p1",
+        "peringatan": [{"kode": "PRIORITAS_TANPA_BUKTI", "pesan": "hipotesis dapat P1"}],
+    }
+    with patch(_POST, new_callable=AsyncMock, return_value=payload):
+        async with Client(mcp) as client:
+            result = await client.call_tool("redesain_putuskan_prioritas", _PUTUSAN)
+    assert result.data == payload
+
+
+@pytest.mark.asyncio
+async def test_redesain_putuskan_tanpa_alasan_ditolak():
+    from fastmcp.exceptions import ToolError
+
+    args = {k: v for k, v in _PUTUSAN.items() if k != "alasan_final"}
+    with patch(_POST, new_callable=AsyncMock) as m:
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError):
+                await client.call_tool("redesain_putuskan_prioritas", args)
+    m.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_redesain_status_penilaian_telah_diputuskan_ditolak():
+    from fastmcp.exceptions import ToolError
+
+    with patch(_POST, new_callable=AsyncMock) as m:
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError):
+                await client.call_tool(
+                    "redesain_status_penilaian",
+                    {"penilaian_id": "p1", "status_penilaian": "Telah diputuskan"},
+                )
+    m.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_redesain_putuskan_422_jadi_tool_error():
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with patch(
+        _POST,
+        new_callable=AsyncMock,
+        side_effect=BackendError("Backend error 422: alasan_final wajib"),
+    ):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool("redesain_putuskan_prioritas", _PUTUSAN)
+    assert "422" in str(exc_info.value)
+    assert "Traceback" not in str(exc_info.value)
