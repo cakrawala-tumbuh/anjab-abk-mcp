@@ -4628,3 +4628,381 @@ async def redesain_ringkasan_yayasan_masalah(ctx: Context, masalah_id: str) -> d
         return await backend_get(f"/api/v1/redesain/yayasan/{masalah_id}", ctx=ctx)
     except BackendError as exc:
         _raise_tool_error(exc)
+
+
+# ── Domain REDESAIN (tool TULIS masalah & bukti, khusus grup tim-kajian) ──────
+
+StatusAwal = Literal["Hipotesis", "Keterangan kasus", "Diperkuat untuk klaim", "Diperselisihkan"]
+Gelombang = Literal["G1", "G2", "G3", "G3 - klarifikasi", "Belum dijadwalkan"]
+YaTidak = Literal["Ya", "Tidak", "Belum tahu"]
+JenisBukti = Literal[
+    "SK/aturan",
+    "Keterangan pemegang",
+    "Pihak serah terima",
+    "Jadwal",
+    "Jejak sistem",
+    "Keluaran/dokumen",
+    "Lainnya",
+]
+StatusPemeriksaanBukti = Literal[
+    "Belum diperiksa",
+    "Diperiksa terbatas",
+    "Diperiksa sesuai klaim",
+    "Diperselisihkan",
+]
+
+
+def _tanpa_none(**fields: object) -> dict:
+    """Bangun body JSON dari kwargs dengan membuang nilai ``None``.
+
+    ``None`` berarti "tidak diubah/tidak dikirim"; mengosongkan field ke
+    ``null`` sengaja tidak didukung.
+
+    Args:
+        **fields: Pasangan nama field dan nilainya.
+
+    Returns:
+        Dict hanya berisi field yang nilainya bukan ``None``.
+    """
+    return {k: v for k, v in fields.items() if v is not None}
+
+
+@mcp.tool
+async def redesain_buat_masalah(
+    ctx: Context,
+    konteks_id: str,
+    periode_acuan: str,
+    rumusan_hipotesis: str,
+    sumber_awal_keterbatasan: str,
+    status_awal: StatusAwal,
+    gelombang: Gelombang,
+    sekolah_id: str | None = None,
+    keterangan_sekolah: str | None = None,
+    periode_pasti: bool | None = None,
+    penjelasan_alternatif: str | None = None,
+    pic_kode_orang: str | None = None,
+    uraian_tugas_ids: list[str] | None = None,
+) -> dict:
+    """Buat satu masalah baru dalam register redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu backend
+    menjawab 403). ``kode`` dibangkitkan sistem dan tidak dapat diisi.
+    ``status_awal`` dibekukan begitu masalah dibuka untuk konfirmasi sekolah
+    (mengubahnya sesudah itu ditolak 409).
+
+    Isian bebas DILARANG memuat identitas atau isi kasus murid, keluarga,
+    diagnosis, maupun konseling. Orang hanya dirujuk lewat kode orang
+    (``pic_kode_orang``), bukan nama, email, atau ID partisipan.
+
+    Args:
+        konteks_id: UUID konteks tempat masalah berada.
+        periode_acuan: Periode acuan masalah (teks, maks. 100 karakter).
+        rumusan_hipotesis: Rumusan hipotesis, bukan kesimpulan.
+        sumber_awal_keterbatasan: Sumber awal beserta keterbatasannya.
+        status_awal: Status awal masalah.
+        gelombang: Gelombang validasi usulan.
+        sekolah_id: ID sekolah; kosongkan bila belum ditetapkan.
+        keterangan_sekolah: Teks bebas sekolah/jenjang bila sekolah belum ditetapkan.
+        periode_pasti: True bila periode sudah pasti (default backend: False).
+        penjelasan_alternatif: Pemeriksaan atau penjelasan alternatif.
+        pic_kode_orang: Kode orang penanggung jawab (pseudonim, mis. dari web Tim).
+        uraian_tugas_ids: ID uraian tugas katalog yang ditautkan.
+
+    Returns:
+        Masalah yang dibuat (termasuk ``kode``) apa adanya dari backend.
+        Backend menolak dengan 422 bila konteks/kode orang/uraian tugas tak dikenal.
+    """
+    body = _tanpa_none(
+        konteks_id=konteks_id,
+        periode_acuan=periode_acuan,
+        rumusan_hipotesis=rumusan_hipotesis,
+        sumber_awal_keterbatasan=sumber_awal_keterbatasan,
+        status_awal=status_awal,
+        gelombang=gelombang,
+        sekolah_id=sekolah_id,
+        keterangan_sekolah=keterangan_sekolah,
+        periode_pasti=periode_pasti,
+        penjelasan_alternatif=penjelasan_alternatif,
+        pic_kode_orang=pic_kode_orang,
+        uraian_tugas_ids=uraian_tugas_ids,
+    )
+    try:
+        return await backend_post("/api/v1/redesain/masalah", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_perbarui_masalah(
+    ctx: Context,
+    masalah_id: str,
+    konteks_id: str | None = None,
+    periode_acuan: str | None = None,
+    rumusan_hipotesis: str | None = None,
+    sumber_awal_keterbatasan: str | None = None,
+    status_awal: StatusAwal | None = None,
+    gelombang: Gelombang | None = None,
+    sekolah_id: str | None = None,
+    keterangan_sekolah: str | None = None,
+    periode_pasti: bool | None = None,
+    penjelasan_alternatif: str | None = None,
+    pic_kode_orang: str | None = None,
+    uraian_tugas_ids: list[str] | None = None,
+) -> dict:
+    """Perbarui sebagian field satu masalah redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404). Hanya field yang diberikan (bukan ``None``) yang dikirim;
+    mengosongkan field ke ``null`` tidak didukung. ``kode`` dan
+    ``status_awal_dibekukan_pada`` read-only.
+
+    ``status_awal`` dibekukan begitu masalah dibuka untuk konfirmasi sekolah:
+    mengubahnya sesudah itu ditolak 409. Isian bebas DILARANG memuat identitas
+    atau isi kasus murid, keluarga, diagnosis, maupun konseling. Orang hanya
+    dirujuk lewat kode orang.
+
+    Args:
+        masalah_id: UUID masalah yang diubah.
+        konteks_id: UUID konteks baru.
+        periode_acuan: Periode acuan baru.
+        rumusan_hipotesis: Rumusan hipotesis baru.
+        sumber_awal_keterbatasan: Sumber awal dan keterbatasan baru.
+        status_awal: Status awal baru (409 bila sudah beku).
+        gelombang: Gelombang validasi baru.
+        sekolah_id: ID sekolah baru.
+        keterangan_sekolah: Teks bebas sekolah/jenjang.
+        periode_pasti: True bila periode sudah pasti.
+        penjelasan_alternatif: Pemeriksaan atau penjelasan alternatif.
+        pic_kode_orang: Kode orang penanggung jawab (pseudonim).
+        uraian_tugas_ids: Daftar ID uraian tugas; MENGGANTI PENUH tautan lama.
+
+    Returns:
+        Masalah setelah diperbarui apa adanya dari backend.
+    """
+    body = _tanpa_none(
+        konteks_id=konteks_id,
+        periode_acuan=periode_acuan,
+        rumusan_hipotesis=rumusan_hipotesis,
+        sumber_awal_keterbatasan=sumber_awal_keterbatasan,
+        status_awal=status_awal,
+        gelombang=gelombang,
+        sekolah_id=sekolah_id,
+        keterangan_sekolah=keterangan_sekolah,
+        periode_pasti=periode_pasti,
+        penjelasan_alternatif=penjelasan_alternatif,
+        pic_kode_orang=pic_kode_orang,
+        uraian_tugas_ids=uraian_tugas_ids,
+    )
+    try:
+        return await backend_patch(f"/api/v1/redesain/masalah/{masalah_id}", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_status_konfirmasi_masalah(ctx: Context, masalah_id: str, dibuka: bool) -> dict:
+    """Buka atau tutup satu masalah untuk konfirmasi sekolah.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404). Tool ini hanya mengubah status buka/tutup; ia tidak menulis atau
+    menghapus isi konfirmasi sekolah. Begitu masalah dibuka dan sekolah
+    memberi keterangan pertama, ``status_awal`` masalah dibekukan.
+
+    Args:
+        masalah_id: UUID masalah.
+        dibuka: True = dibuka untuk konfirmasi sekolah; False = ditutup.
+
+    Returns:
+        Masalah setelah status diubah, apa adanya dari backend.
+    """
+    try:
+        return await backend_post(
+            f"/api/v1/redesain/masalah/{masalah_id}/status-konfirmasi",
+            ctx=ctx,
+            body={"dibuka": dibuka},
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_cari_bukti(
+    ctx: Context,
+    domain: list | None = None,
+    order: list | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Cari bukti dalam register redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403). Domain
+    kosong berarti daftar semua. Bukti berupa rujukan teks, bukan unggahan berkas.
+
+    Args:
+        domain: Kriteria pencarian bergaya Odoo. Field yang dapat difilter:
+            ``masalah_id``, ``langkah_id``, ``jenis``, ``status_pemeriksaan``.
+        order: Urutan hasil, mis. ``[["kode", "asc"]]``.
+        limit: Jumlah item per halaman (default 20).
+        offset: Item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``items`` + ``total`` apa adanya dari backend.
+    """
+    body = {"domain": domain or [], "order": order or [], "limit": limit, "offset": offset}
+    try:
+        return await backend_post("/api/v1/redesain/bukti/search", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_detail_bukti(ctx: Context, bukti_id: str) -> dict:
+    """Ambil satu bukti redesain berdasarkan ID.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404).
+
+    Args:
+        bukti_id: UUID bukti.
+
+    Returns:
+        Data bukti apa adanya dari backend.
+    """
+    try:
+        return await backend_get(f"/api/v1/redesain/bukti/{bukti_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_buat_bukti(
+    ctx: Context,
+    masalah_id: str,
+    unit_periode: str,
+    jenis: JenisBukti,
+    independen: YaTidak,
+    klaim_didukung: str,
+    tanggal_versi_lokasi: str,
+    langkah_id: str | None = None,
+    pembuat_kode_orang: str | None = None,
+    pembuat_peran: str | None = None,
+    klaim_tidak_didukung: str | None = None,
+    status_pemeriksaan: StatusPemeriksaanBukti | None = None,
+    pemeriksa_kode_orang: str | None = None,
+    alasan: str | None = None,
+    catatan_privasi_gap: str | None = None,
+) -> dict:
+    """Catat satu bukti untuk sebuah masalah redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403). Bukti
+    berupa RUJUKAN TEKS (jenis, tanggal/versi/lokasi), bukan unggahan berkas.
+    ``kode`` dibangkitkan sistem. Isian bebas DILARANG memuat identitas atau
+    isi kasus murid, keluarga, diagnosis, maupun konseling. Orang hanya
+    dirujuk lewat kode orang (``*_kode_orang``), bukan nama atau email.
+
+    Args:
+        masalah_id: UUID masalah yang dibuktikan.
+        unit_periode: Unit dan periode yang dicakup bukti.
+        jenis: Jenis sumber bukti.
+        independen: Apakah bukti independen dari pernyataan awal.
+        klaim_didukung: Klaim yang didukung bukti ini.
+        tanggal_versi_lokasi: Tanggal, versi, dan lokasi rujukan bukti.
+        langkah_id: UUID langkah alur terkait (harus milik masalah yang sama, else 422).
+        pembuat_kode_orang: Kode orang pembuat bukti (pseudonim).
+        pembuat_peran: Peran pembuat bukti.
+        klaim_tidak_didukung: Klaim yang TIDAK didukung bukti ini.
+        status_pemeriksaan: Status pemeriksaan (default backend: ``Belum diperiksa``).
+        pemeriksa_kode_orang: Kode orang pemeriksa (pseudonim).
+        alasan: Alasan atau catatan pemeriksaan.
+        catatan_privasi_gap: Catatan celah privasi.
+
+    Returns:
+        Bukti yang dibuat (termasuk ``kode``) apa adanya dari backend.
+    """
+    body = _tanpa_none(
+        masalah_id=masalah_id,
+        unit_periode=unit_periode,
+        jenis=jenis,
+        independen=independen,
+        klaim_didukung=klaim_didukung,
+        tanggal_versi_lokasi=tanggal_versi_lokasi,
+        langkah_id=langkah_id,
+        pembuat_kode_orang=pembuat_kode_orang,
+        pembuat_peran=pembuat_peran,
+        klaim_tidak_didukung=klaim_tidak_didukung,
+        status_pemeriksaan=status_pemeriksaan,
+        pemeriksa_kode_orang=pemeriksa_kode_orang,
+        alasan=alasan,
+        catatan_privasi_gap=catatan_privasi_gap,
+    )
+    try:
+        return await backend_post("/api/v1/redesain/bukti", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_perbarui_bukti(
+    ctx: Context,
+    bukti_id: str,
+    unit_periode: str | None = None,
+    jenis: JenisBukti | None = None,
+    independen: YaTidak | None = None,
+    klaim_didukung: str | None = None,
+    tanggal_versi_lokasi: str | None = None,
+    langkah_id: str | None = None,
+    pembuat_kode_orang: str | None = None,
+    pembuat_peran: str | None = None,
+    klaim_tidak_didukung: str | None = None,
+    status_pemeriksaan: StatusPemeriksaanBukti | None = None,
+    pemeriksa_kode_orang: str | None = None,
+    alasan: str | None = None,
+    catatan_privasi_gap: str | None = None,
+) -> dict:
+    """Perbarui sebagian field satu bukti redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404). Hanya field yang diberikan (bukan ``None``) yang dikirim;
+    mengosongkan field ke ``null`` tidak didukung, dan ``masalah_id`` tidak
+    dapat dipindahkan. Isian bebas DILARANG memuat identitas atau isi kasus
+    murid, keluarga, diagnosis, maupun konseling; orang hanya dirujuk lewat
+    kode orang.
+
+    Args:
+        bukti_id: UUID bukti yang diubah.
+        unit_periode: Unit dan periode baru.
+        jenis: Jenis sumber baru.
+        independen: Independensi baru.
+        klaim_didukung: Klaim didukung baru.
+        tanggal_versi_lokasi: Tanggal, versi, lokasi rujukan baru.
+        langkah_id: UUID langkah alur (harus milik masalah yang sama, else 422).
+        pembuat_kode_orang: Kode orang pembuat (pseudonim).
+        pembuat_peran: Peran pembuat.
+        klaim_tidak_didukung: Klaim yang tidak didukung.
+        status_pemeriksaan: Status pemeriksaan baru.
+        pemeriksa_kode_orang: Kode orang pemeriksa (pseudonim).
+        alasan: Alasan atau catatan pemeriksaan.
+        catatan_privasi_gap: Catatan celah privasi.
+
+    Returns:
+        Bukti setelah diperbarui apa adanya dari backend.
+    """
+    body = _tanpa_none(
+        unit_periode=unit_periode,
+        jenis=jenis,
+        independen=independen,
+        klaim_didukung=klaim_didukung,
+        tanggal_versi_lokasi=tanggal_versi_lokasi,
+        langkah_id=langkah_id,
+        pembuat_kode_orang=pembuat_kode_orang,
+        pembuat_peran=pembuat_peran,
+        klaim_tidak_didukung=klaim_tidak_didukung,
+        status_pemeriksaan=status_pemeriksaan,
+        pemeriksa_kode_orang=pemeriksa_kode_orang,
+        alasan=alasan,
+        catatan_privasi_gap=catatan_privasi_gap,
+    )
+    try:
+        return await backend_patch(f"/api/v1/redesain/bukti/{bukti_id}", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)

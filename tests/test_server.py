@@ -1548,11 +1548,11 @@ _PATH_TERLARANG = ("/kode-orang", "/konfirmasi", "/sekolah/", "/ekspor/")
 
 @pytest.mark.asyncio
 async def test_redesain_himpunan_tool_tertutup():
-    """Penjaga identitas: daftar tool redesain_* harus persis 10 nama yang disepakati."""
+    """Penjaga identitas: daftar tool redesain_* harus persis 17 nama yang disepakati."""
     async with Client(mcp) as client:
         tools = await client.list_tools()
     names = {t.name for t in tools if t.name.startswith("redesain_")}
-    assert names == set(_REDESAIN_TOOLS)
+    assert names == set(_REDESAIN_TOOLS) | set(_REDESAIN_TULIS)
 
 
 @pytest.mark.asyncio
@@ -1644,3 +1644,142 @@ async def test_redesain_backend_error_403_jadi_tool_error():
     teks = str(exc_info.value)
     assert "Traceback" not in teks
     assert "403" in teks
+
+
+# ── Domain REDESAIN (tool tulis masalah & bukti, tim-kajian) ──────────────────
+_PATCH = "anjab_abk_mcp.server.backend_patch"
+_MASALAH_BARU = {
+    "konteks_id": "k1",
+    "periode_acuan": "TA 2026/27",
+    "rumusan_hipotesis": "h",
+    "sumber_awal_keterbatasan": "s",
+    "status_awal": "Hipotesis",
+    "gelombang": "G1",
+}
+_BUKTI_BARU = {
+    "masalah_id": "m1",
+    "unit_periode": "SD 2026",
+    "jenis": "SK/aturan",
+    "independen": "Ya",
+    "klaim_didukung": "k",
+    "tanggal_versi_lokasi": "1 Jan 2026, v1, arsip",
+}
+_REDESAIN_TULIS = {
+    # nama: (patch target, method, path, argumen, body)
+    "redesain_buat_masalah": (
+        _POST,
+        "POST",
+        "/api/v1/redesain/masalah",
+        _MASALAH_BARU,
+        _MASALAH_BARU,
+    ),
+    "redesain_perbarui_masalah": (
+        _PATCH,
+        "PATCH",
+        "/api/v1/redesain/masalah/m1",
+        {"masalah_id": "m1", "gelombang": "G2"},
+        {"gelombang": "G2"},
+    ),
+    "redesain_status_konfirmasi_masalah": (
+        _POST,
+        "POST",
+        "/api/v1/redesain/masalah/m1/status-konfirmasi",
+        {"masalah_id": "m1", "dibuka": True},
+        {"dibuka": True},
+    ),
+    "redesain_cari_bukti": (
+        _POST,
+        "POST",
+        "/api/v1/redesain/bukti/search",
+        {"domain": [["jenis", "=", "Jadwal"]]},
+        {"domain": [["jenis", "=", "Jadwal"]], "order": [], "limit": 20, "offset": 0},
+    ),
+    "redesain_detail_bukti": (_GET, "GET", "/api/v1/redesain/bukti/b1", {"bukti_id": "b1"}, None),
+    "redesain_buat_bukti": (
+        _POST,
+        "POST",
+        "/api/v1/redesain/bukti",
+        _BUKTI_BARU,
+        _BUKTI_BARU,
+    ),
+    "redesain_perbarui_bukti": (
+        _PATCH,
+        "PATCH",
+        "/api/v1/redesain/bukti/b1",
+        {"bukti_id": "b1", "status_pemeriksaan": "Diperiksa sesuai klaim"},
+        {"status_pemeriksaan": "Diperiksa sesuai klaim"},
+    ),
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nama", sorted(_REDESAIN_TULIS))
+async def test_redesain_tulis_method_path_dan_body(nama):
+    target, _method, path, args, body = _REDESAIN_TULIS[nama]
+    payload = {"id": "x", "kode": "M-K01-01"}
+    with patch(target, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(nama, args)
+    assert result.data == payload
+    assert m.call_args.args[0] == path
+    if body is not None:
+        assert m.call_args.kwargs["body"] == body
+
+
+@pytest.mark.asyncio
+async def test_redesain_buat_bukti_jenis_tidak_valid_ditolak():
+    from fastmcp.exceptions import ToolError
+
+    with patch(_POST, new_callable=AsyncMock) as m:
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError):
+                await client.call_tool("redesain_buat_bukti", {**_BUKTI_BARU, "jenis": "Foto"})
+    m.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_redesain_perbarui_masalah_409_jadi_tool_error():
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with patch(
+        _PATCH,
+        new_callable=AsyncMock,
+        side_effect=BackendError("Backend error 409: status awal sudah beku"),
+    ):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool(
+                    "redesain_perbarui_masalah",
+                    {"masalah_id": "m1", "status_awal": "Hipotesis"},
+                )
+    assert "409" in str(exc_info.value)
+    assert "Traceback" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_redesain_tulis_tanpa_path_terlarang_dan_parameter_identitas():
+    """Tak ada path konfirmasi/kode-orang/sekolah/ekspor, DELETE, atau parameter identitas."""
+    async with Client(mcp) as client:
+        tools = [t for t in await client.list_tools() if t.name.startswith("redesain_")]
+    for t in tools:
+        props = set(t.inputSchema.get("properties", {}))
+        assert not props & {"nama", "email", "partisipan_id"}, t.name
+    paths = []
+    with (
+        patch(_GET, new_callable=AsyncMock, return_value={}) as g,
+        patch(_POST, new_callable=AsyncMock, return_value={}) as p,
+        patch(_PATCH, new_callable=AsyncMock, return_value={}) as pa,
+        patch("anjab_abk_mcp.server.backend_delete", new_callable=AsyncMock) as d,
+    ):
+        async with Client(mcp) as client:
+            for nama, (_t, _m, _p, args, _b) in _REDESAIN_TULIS.items():
+                await client.call_tool(nama, args)
+        paths = [c.args[0] for c in g.call_args_list + p.call_args_list + pa.call_args_list]
+        d.assert_not_awaited()
+    assert len(paths) == len(_REDESAIN_TULIS)
+    for path in paths:
+        # "/status-konfirmasi" sah (buka/tutup); yang dilarang path konfirmasi per orang.
+        assert not any(t in path for t in ("/kode-orang", "/sekolah/", "/ekspor/")), path
+        assert "/konfirmasi" not in path.replace("/status-konfirmasi", ""), path

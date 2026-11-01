@@ -8,6 +8,12 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Ditambahkan
 
+- **7 tool tulis domain `redesain_*`** untuk Tim Kajian: `redesain_buat_masalah`,
+  `redesain_perbarui_masalah`, `redesain_status_konfirmasi_masalah` (buka/tutup
+  untuk konfirmasi), `redesain_cari_bukti`, `redesain_detail_bukti`,
+  `redesain_buat_bukti`, `redesain_perbarui_bukti`. Orang hanya dirujuk lewat
+  kode orang (`*_kode_orang`); tidak ada tool yang menulis/menghapus konfirmasi
+  atau menerima nama orang (`cakrawala-tumbuh/anjab-abk-mcp#17`).
 - **10 tool baca domain `redesain_*`** untuk Register Validasi & Prioritas
   Redesain v1.3 (khusus anggota grup `tim-kajian`): `redesain_cari_konteks`,
   `redesain_detail_konteks`, `redesain_cari_masalah`, `redesain_detail_masalah`,
