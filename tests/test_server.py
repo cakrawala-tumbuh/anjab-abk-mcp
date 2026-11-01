@@ -1523,3 +1523,124 @@ async def test_ts_kuesioner_saya_structured_content():
     assert result.data is not None
     assert result.data[0]["status"] == "PENDING"
     assert m.await_args.args[0] == "/api/v1/time-study/kuesioner/saya"
+
+
+# ── Domain REDESAIN (tool baca, tim-kajian) ───────────────────────────────────
+_REDESAIN_TOOLS = {
+    # nama: (method, path, argumen)
+    "redesain_cari_konteks": ("POST", "/api/v1/redesain/konteks/search", {}),
+    "redesain_detail_konteks": ("GET", "/api/v1/redesain/konteks/k1", {"konteks_id": "k1"}),
+    "redesain_cari_masalah": ("POST", "/api/v1/redesain/masalah/search", {}),
+    "redesain_detail_masalah": ("GET", "/api/v1/redesain/masalah/m1", {"masalah_id": "m1"}),
+    "redesain_sebaran_k": ("GET", "/api/v1/redesain/masalah/m1/sebaran-k", {"masalah_id": "m1"}),
+    "redesain_cari_penilaian": ("POST", "/api/v1/redesain/penilaian/search", {}),
+    "redesain_detail_penilaian": ("GET", "/api/v1/redesain/penilaian/p1", {"penilaian_id": "p1"}),
+    "redesain_agenda_yayasan": ("GET", "/api/v1/redesain/penilaian/agenda-yayasan", {}),
+    "redesain_cari_ringkasan_yayasan": ("POST", "/api/v1/redesain/yayasan/search", {}),
+    "redesain_ringkasan_yayasan_masalah": (
+        "GET",
+        "/api/v1/redesain/yayasan/m1",
+        {"masalah_id": "m1"},
+    ),
+}
+_PATH_TERLARANG = ("/kode-orang", "/konfirmasi", "/sekolah/", "/ekspor/")
+
+
+@pytest.mark.asyncio
+async def test_redesain_himpunan_tool_tertutup():
+    """Penjaga identitas: daftar tool redesain_* harus persis 10 nama yang disepakati."""
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
+    names = {t.name for t in tools if t.name.startswith("redesain_")}
+    assert names == set(_REDESAIN_TOOLS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nama", sorted(_REDESAIN_TOOLS))
+async def test_redesain_tool_method_path_dan_payload(nama):
+    method, path, args = _REDESAIN_TOOLS[nama]
+    payload = {"items": [{"id": "x"}], "total": 1}
+    target = _POST if method == "POST" else _GET
+    with patch(target, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(nama, args)
+    assert result.data == payload
+    assert m.call_args.args[0] == path
+    if method == "POST":
+        assert m.call_args.kwargs["body"] == {
+            "domain": [],
+            "order": [],
+            "limit": 20,
+            "offset": 0,
+        }
+
+
+@pytest.mark.asyncio
+async def test_redesain_agenda_yayasan_teruskan_limit_offset():
+    with patch(_GET, new_callable=AsyncMock, return_value={"items": [], "total": 0}) as m:
+        async with Client(mcp) as client:
+            await client.call_tool("redesain_agenda_yayasan", {"limit": 5, "offset": 10})
+    assert m.call_args.kwargs["limit"] == 5
+    assert m.call_args.kwargs["offset"] == 10
+
+
+@pytest.mark.asyncio
+async def test_redesain_detail_penilaian_peringatan_utuh():
+    payload = {
+        "id": "p1",
+        "saran_otomatis": None,
+        "peringatan": [{"kode": "PRIORITAS_TANPA_BUKTI", "pesan": "tanpa bukti"}],
+    }
+    with patch(_GET, new_callable=AsyncMock, return_value=payload):
+        async with Client(mcp) as client:
+            result = await client.call_tool("redesain_detail_penilaian", {"penilaian_id": "p1"})
+    assert result.data["peringatan"] == payload["peringatan"]
+    assert result.data["saran_otomatis"] is None
+
+
+@pytest.mark.asyncio
+async def test_redesain_ringkasan_yayasan_nilai_null_tidak_diganti():
+    payload = {"masalah_id": "m1", "k1": None, "k2": 3}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload):
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "redesain_ringkasan_yayasan_masalah", {"masalah_id": "m1"}
+            )
+    assert result.data["k1"] is None
+    assert result.data["k2"] == 3
+
+
+@pytest.mark.asyncio
+async def test_redesain_tak_ada_path_terlarang():
+    """Seluruh tool redesain_* tidak boleh memanggil path identitas/konfirmasi/ekspor."""
+    paths = []
+    with (
+        patch(_GET, new_callable=AsyncMock, return_value={}) as g,
+        patch(_POST, new_callable=AsyncMock, return_value={}) as p,
+    ):
+        async with Client(mcp) as client:
+            for nama, (_, _, args) in _REDESAIN_TOOLS.items():
+                await client.call_tool(nama, args)
+        paths = [c.args[0] for c in g.call_args_list + p.call_args_list]
+    assert len(paths) == len(_REDESAIN_TOOLS)
+    for path in paths:
+        assert not any(t in path for t in _PATH_TERLARANG), path
+
+
+@pytest.mark.asyncio
+async def test_redesain_backend_error_403_jadi_tool_error():
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with patch(
+        _GET,
+        new_callable=AsyncMock,
+        side_effect=BackendError("Backend error 403: bukan anggota tim-kajian"),
+    ):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool("redesain_detail_masalah", {"masalah_id": "m1"})
+    teks = str(exc_info.value)
+    assert "Traceback" not in teks
+    assert "403" in teks

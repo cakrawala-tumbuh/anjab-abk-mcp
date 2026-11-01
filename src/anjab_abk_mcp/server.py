@@ -15,6 +15,8 @@ Tools dikelompokkan per domain:
   - wcp:            instrumen WCP singleton (tanpa sesi), responden, hasil
   - opm:            sesi OPM (CRUD sesi, buka/tutup, task, responden, jawaban, analisis, hasil)
   - time_study:     penugasan TS per partisipan, log harian, kuesioner
+  - redesain:       register Validasi & Prioritas Redesain v1.3 (tool BACA, khusus
+                    grup ``tim-kajian``): konteks, masalah, penilaian, ringkasan yayasan
 """
 
 from __future__ import annotations
@@ -4344,5 +4346,285 @@ async def hapus_uraian_tugas(ctx: Context, ut_id: str) -> dict:
     """
     try:
         return await backend_delete(f"/api/v1/task-inventory/uraian-tugas/{ut_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+# ── Domain REDESAIN (tool BACA, khusus grup tim-kajian) ───────────────────────
+
+
+@mcp.tool
+async def redesain_cari_konteks(
+    ctx: Context,
+    domain: list | None = None,
+    order: list | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Cari konteks (katalog) redesain pekerjaan.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu backend
+    menjawab 403). Domain kosong berarti daftar semua.
+
+    Args:
+        domain: Kriteria pencarian bergaya Odoo. Field yang dapat difilter:
+            field mengikuti kolom konteks (mis. ``kode``).
+        order: Urutan hasil, mis. ``[["kode", "asc"]]``.
+        limit: Jumlah item per halaman (default 20).
+        offset: Item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``items`` + ``total`` apa adanya dari backend.
+    """
+    body = {"domain": domain or [], "order": order or [], "limit": limit, "offset": offset}
+    try:
+        return await backend_post("/api/v1/redesain/konteks/search", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_detail_konteks(ctx: Context, konteks_id: str) -> dict:
+    """Ambil satu konteks redesain berdasarkan ID.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404).
+
+    Args:
+        konteks_id: UUID yang dimaksud.
+
+    Returns:
+        Data apa adanya dari backend.
+    """
+    try:
+        return await backend_get(f"/api/v1/redesain/konteks/{konteks_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_cari_masalah(
+    ctx: Context,
+    domain: list | None = None,
+    order: list | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Cari masalah dalam register redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu backend
+    menjawab 403). Domain kosong berarti daftar semua.
+
+    Tidak ada tool ini yang menyingkap isi konfirmasi per orang atau peta kode
+    orang ke identitas asli.
+
+    Args:
+        domain: Kriteria pencarian bergaya Odoo. Field yang dapat difilter:
+            ``kode``, ``konteks_id``, ``sekolah_id``, ``status_awal``,
+            ``gelombang``, ``dibuka_untuk_konfirmasi``.
+        order: Urutan hasil, mis. ``[["kode", "asc"]]``.
+        limit: Jumlah item per halaman (default 20).
+        offset: Item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``items`` + ``total`` apa adanya dari backend.
+    """
+    body = {"domain": domain or [], "order": order or [], "limit": limit, "offset": offset}
+    try:
+        return await backend_post("/api/v1/redesain/masalah/search", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_detail_masalah(ctx: Context, masalah_id: str) -> dict:
+    """Ambil satu masalah redesain berdasarkan ID.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404).
+
+    Orang hanya muncul sebagai kode orang (``*_kode_orang``), tidak pernah
+    nama atau email.
+
+    Args:
+        masalah_id: UUID yang dimaksud.
+
+    Returns:
+        Data apa adanya dari backend.
+    """
+    try:
+        return await backend_get(f"/api/v1/redesain/masalah/{masalah_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_sebaran_k(ctx: Context, masalah_id: str) -> dict:
+    """Ambil sebaran K1-K4 sebuah masalah redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404).
+
+    Sebaran K1-K4 adalah HITUNGAN per kategori; tidak ada rata-rata dan jangan
+    dibuat sendiri. Nilai ``null`` bukan nol.
+
+    Args:
+        masalah_id: UUID yang dimaksud.
+
+    Returns:
+        Hitungan per kategori K1-K4.
+    """
+    try:
+        return await backend_get(f"/api/v1/redesain/masalah/{masalah_id}/sebaran-k", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_cari_penilaian(
+    ctx: Context,
+    domain: list | None = None,
+    order: list | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Cari penilaian masalah redesain beserta saran triasenya.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu backend
+    menjawab 403). Domain kosong berarti daftar semua.
+
+    ``saran_otomatis`` adalah saran aturan triase ``v1.3``, BUKAN keputusan.
+    Nilai ``null`` tidak sama dengan ``Rendah`` dan tidak sama dengan ``Belum
+    tahu``. Bila respons memuat ``peringatan`` (mis.
+    ``PRIORITAS_TANPA_BUKTI``, ``BERBEDA_DARI_SARAN``), WAJIB disampaikan ke
+    pengguna.
+
+    Args:
+        domain: Kriteria pencarian bergaya Odoo. Field yang dapat difilter:
+            ``masalah_id``, ``status_bukti``, ``saran_otomatis``.
+        order: Urutan hasil, mis. ``[["kode", "asc"]]``.
+        limit: Jumlah item per halaman (default 20).
+        offset: Item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``items`` + ``total`` apa adanya dari backend.
+    """
+    body = {"domain": domain or [], "order": order or [], "limit": limit, "offset": offset}
+    try:
+        return await backend_post("/api/v1/redesain/penilaian/search", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_detail_penilaian(ctx: Context, penilaian_id: str) -> dict:
+    """Ambil satu penilaian redesain beserta saran triase dan peringatannya.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404).
+
+    ``saran_otomatis`` adalah saran aturan triase ``v1.3``, BUKAN keputusan.
+    Nilai ``null`` tidak sama dengan ``Rendah`` dan tidak sama dengan ``Belum
+    tahu``. Bila respons memuat ``peringatan`` (mis.
+    ``PRIORITAS_TANPA_BUKTI``, ``BERBEDA_DARI_SARAN``), WAJIB disampaikan ke
+    pengguna.
+
+    Args:
+        penilaian_id: UUID yang dimaksud.
+
+    Returns:
+        Data apa adanya dari backend.
+    """
+    try:
+        return await backend_get(f"/api/v1/redesain/penilaian/{penilaian_id}", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_agenda_yayasan(ctx: Context, limit: int = 20, offset: int = 0) -> dict:
+    """Ambil agenda yayasan: penilaian yang perlu dibahas di tingkat yayasan.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403).
+    ``saran_otomatis`` adalah saran aturan triase ``v1.3``, BUKAN keputusan.
+    Nilai ``null`` tidak sama dengan ``Rendah`` dan tidak sama dengan ``Belum
+    tahu``. Bila respons memuat ``peringatan`` (mis. ``PRIORITAS_TANPA_BUKTI``,
+    ``BERBEDA_DARI_SARAN``), WAJIB disampaikan ke pengguna.
+
+    Args:
+        limit: Jumlah item per halaman (default 20).
+        offset: Item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``items`` + ``total`` apa adanya dari backend.
+    """
+    try:
+        return await backend_get(
+            "/api/v1/redesain/penilaian/agenda-yayasan", ctx=ctx, limit=limit, offset=offset
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_cari_ringkasan_yayasan(
+    ctx: Context,
+    domain: list | None = None,
+    order: list | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Cari ringkasan yayasan atas masalah redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu backend
+    menjawab 403). Domain kosong berarti daftar semua.
+
+    Prioritas masalah BUKAN izin mengubah pekerjaan. Yayasan hanya menerima
+    ringkasan ini dan tidak menginput apa pun. ``saran_otomatis`` adalah saran
+    aturan triase ``v1.3``, BUKAN keputusan. Nilai ``null`` tidak sama dengan
+    ``Rendah`` dan tidak sama dengan ``Belum tahu``. Bila respons memuat
+    ``peringatan`` (mis. ``PRIORITAS_TANPA_BUKTI``, ``BERBEDA_DARI_SARAN``),
+    WAJIB disampaikan ke pengguna.
+
+    Args:
+        domain: Kriteria pencarian bergaya Odoo. Field yang dapat difilter:
+            ``konteks_kode``, ``status_bukti``, ``saran_otomatis``,
+            ``prioritas_final``, ``status_penilaian``.
+        order: Urutan hasil, mis. ``[["kode", "asc"]]``.
+        limit: Jumlah item per halaman (default 20).
+        offset: Item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``items`` + ``total`` apa adanya dari backend.
+    """
+    body = {"domain": domain or [], "order": order or [], "limit": limit, "offset": offset}
+    try:
+        return await backend_post("/api/v1/redesain/yayasan/search", ctx=ctx, body=body)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def redesain_ringkasan_yayasan_masalah(ctx: Context, masalah_id: str) -> dict:
+    """Ambil ringkasan yayasan untuk satu masalah redesain.
+
+    Hanya dapat diakses anggota grup ``tim-kajian`` (selain itu 403; ID tidak
+    ada 404).
+
+    Prioritas masalah BUKAN izin mengubah pekerjaan. Yayasan hanya menerima
+    ringkasan ini dan tidak menginput apa pun. ``saran_otomatis`` adalah saran
+    aturan triase ``v1.3``, BUKAN keputusan. Nilai ``null`` tidak sama dengan
+    ``Rendah`` dan tidak sama dengan ``Belum tahu``. Bila respons memuat
+    ``peringatan`` (mis. ``PRIORITAS_TANPA_BUKTI``, ``BERBEDA_DARI_SARAN``),
+    WAJIB disampaikan ke pengguna.
+
+    Args:
+        masalah_id: UUID yang dimaksud.
+
+    Returns:
+        Data apa adanya dari backend.
+    """
+    try:
+        return await backend_get(f"/api/v1/redesain/yayasan/{masalah_id}", ctx=ctx)
     except BackendError as exc:
         _raise_tool_error(exc)

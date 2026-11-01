@@ -6,6 +6,17 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Ditambahkan
+
+- **10 tool baca domain `redesain_*`** untuk Register Validasi & Prioritas
+  Redesain v1.3 (khusus anggota grup `tim-kajian`): `redesain_cari_konteks`,
+  `redesain_detail_konteks`, `redesain_cari_masalah`, `redesain_detail_masalah`,
+  `redesain_sebaran_k`, `redesain_cari_penilaian`, `redesain_detail_penilaian`,
+  `redesain_agenda_yayasan`, `redesain_cari_ringkasan_yayasan`,
+  `redesain_ringkasan_yayasan_masalah`. Hanya baca; tidak ada tool yang
+  menyingkap konfirmasi per orang atau peta kode orang ke identitas asli
+  (`cakrawala-tumbuh/anjab-abk-mcp#16`).
+
 ## [0.19.0] - 2026-09-25
 
 ### Ditambahkan
