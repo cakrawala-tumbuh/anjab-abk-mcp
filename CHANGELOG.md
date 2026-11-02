@@ -6,6 +6,8 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-11-02
+
 ### Diubah
 
 - Image GHCR rilis kini multi-arch `linux/amd64` dan `linux/arm64` (input
