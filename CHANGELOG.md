@@ -6,6 +6,12 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Diubah
+
+- Image GHCR rilis kini multi-arch `linux/amd64` dan `linux/arm64` (input
+  `platforms` pada caller `ghcr.yml@v2`) agar MCP dapat berjalan di SBC ARM
+  (shared-infra-support#23).
+
 ## [0.20.0] - 2026-11-01
 
 ### Ditambahkan
