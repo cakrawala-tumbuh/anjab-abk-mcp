@@ -1896,3 +1896,78 @@ async def test_redesain_putuskan_422_jadi_tool_error():
                 await client.call_tool("redesain_putuskan_prioritas", _PUTUSAN)
     assert "422" in str(exc_info.value)
     assert "Traceback" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_tool_flag_dan_register_pengecualian_terdaftar():
+    async with Client(mcp) as client:
+        names = {t.name for t in await client.list_tools()}
+    assert "fitur_status" in names
+    assert "opm_daftar_pengecualian" in names
+
+
+@pytest.mark.asyncio
+async def test_fitur_status_meneruskan_respons_apa_adanya():
+    payload = {"items": [{"kode": "WCP_DCS_SCORING", "aktif": False, "keterangan": "x"}]}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("fitur_status", {})
+    assert result.data == payload
+    assert m.call_args.args[0] == "/api/v1/system/fitur"
+
+
+@pytest.mark.asyncio
+async def test_opm_daftar_pengecualian_meneruskan_sesi_limit_offset():
+    payload = {"items": [{"task_kode": "T-012", "alasan": "TI_DETAIL_UNMATCHED"}], "total": 1}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "opm_daftar_pengecualian", {"sesi_id": "s1", "limit": 10, "offset": 5}
+            )
+    assert result.data["total"] == 1
+    assert m.call_args.args[0] == "/api/v1/opm/sesi/s1/pengecualian"
+    assert m.call_args.kwargs["limit"] == 10
+    assert m.call_args.kwargs["offset"] == 5
+
+
+@pytest.mark.asyncio
+async def test_opm_daftar_pengecualian_404_jadi_tool_error():
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with patch(_GET, new_callable=AsyncMock, side_effect=BackendError("Backend error 404: x")):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool("opm_daftar_pengecualian", {"sesi_id": "nada"})
+    assert "404" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_dcs_hasil_responden_409_scoring_key_not_approved_jadi_tool_error():
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with patch(
+        _GET,
+        new_callable=AsyncMock,
+        side_effect=BackendError("Backend error 409: scoring_key_not_approved"),
+    ):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool("dcs_hasil_responden", {"responden_id": "r1"})
+    assert "scoring_key_not_approved" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_deskripsi_hasil_wcp_dcs_menyebut_mode():
+    """Docstring yang menyebut risk_flag/k_index wajib juga menyebut `mode`."""
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in await client.list_tools()}
+    for nama in ("dcs_analisis", "dcs_hasil", "wcp_analisis", "wcp_hasil"):
+        assert "mode" in (tools[nama].description or ""), nama
+    for t in tools.values():
+        d = t.description or ""
+        if "risk_flag" in d or "k_index" in d:
+            assert "mode" in d, t.name

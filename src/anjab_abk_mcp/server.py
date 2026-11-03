@@ -725,6 +725,34 @@ async def ti_hasil(ctx: Context, sesi_id: str) -> dict:
 
 
 # ════════════════════════════════════════════════════════════════════════════════
+# SISTEM — flag fungsi
+# ════════════════════════════════════════════════════════════════════════════════
+
+
+@mcp.tool
+async def fitur_status(ctx: Context) -> dict:
+    """Ambil status flag fungsi (fitur) backend.
+
+    Flag hanya berubah lewat environment backend + restart; tool ini
+    read-only dan tidak bisa mengubahnya. Kelima kode flag: ``AI_NARRATIVE_DRAFT``
+    (draf narasi berbantuan AI), ``PARTICIPANT_VALIDATION`` (validasi hasil oleh
+    partisipan), ``WCP_DCS_SCORING`` (skor dan interpretasi WCP/DCS; mati =
+    hasil WCP/DCS ``RAW_ONLY`` dan ``*_hasil_responden`` 409
+    ``scoring_key_not_approved``), ``RESEARCH_EXPORT`` (ekspor data riset),
+    ``CHANGE_AUTHORIZATION`` (otorisasi perubahan). Periksa flag ini sebelum
+    mengandalkan fungsi yang digerbangnya.
+
+    Returns:
+        ``{"items": [{"kode": str, "aktif": bool, "keterangan": str}, ...]}``,
+        apa adanya dari backend.
+    """
+    try:
+        return await backend_get("/api/v1/system/fitur", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
 # DOMAIN: DCS (Dimension Classification Survey)
 # ════════════════════════════════════════════════════════════════════════════════
 
@@ -735,11 +763,14 @@ async def dcs_instrumen(ctx: Context) -> dict:
 
     DCS adalah instrumen **tunggal** (satu deployment = satu studi): TIDAK ADA
     konsep sesi/`sesi_id`. Satu baris instrumen mengalir lewat status
-    ``OPEN -> CLOSED -> ANALYZED``, dikelola migrasi (tidak ada create/delete).
+    ``OPEN -> CLOSED -> ANALYZED`` (balik ke ``OPEN`` lewat
+    ``dcs_buka_ulang_instrumen``), dikelola migrasi (tidak ada create/delete).
 
     Returns:
         Dict berisi ``id`` (selalu ``"dcs"``), ``status`` (OPEN | CLOSED |
-        ANALYZED), ``min_responden``, ``catatan``, ``closed_at``, ``created_at``.
+        ANALYZED), ``min_responden``, ``catatan``, ``closed_at``, ``created_at``,
+        serta penanda bank item: ``item_bank_hash`` (sha256 bank item aktif) dan
+        ``jumlah_item`` (jumlah item aktif).
     """
     try:
         return await backend_get("/api/v1/dcs/instrumen", ctx=ctx)
@@ -793,10 +824,12 @@ async def dcs_tutup_instrumen(ctx: Context) -> dict:
 
 @mcp.tool
 async def dcs_buka_ulang_instrumen(ctx: Context) -> dict:
-    """Buka ulang instrumen DCS yang sudah ditutup — singleton, tanpa sesi.
+    """Buka ulang instrumen DCS — singleton, tanpa sesi. **Non-destruktif.**
 
-    Transisi status: CLOSED → OPEN. Dipakai bila perlu menerima jawaban
-    tambahan setelah instrumen sempat ditutup.
+    Transisi status ``CLOSED → OPEN`` **dan** ``ANALYZED → OPEN``; tidak ada
+    responden atau jawaban yang dihapus. Dipakai bila perlu menerima jawaban
+    tambahan atau mengulang analisis setelah instrumen ditutup/dianalisis.
+    Transisi dari status ``OPEN`` ditolak backend.
 
     Returns:
         Data instrumen DCS yang sudah diperbarui dengan status ``OPEN``.
@@ -809,21 +842,25 @@ async def dcs_buka_ulang_instrumen(ctx: Context) -> dict:
 
 @mcp.tool
 async def dcs_reset_instrumen(ctx: Context) -> dict:
-    """Reset instrumen DCS — singleton, tanpa sesi. **DESTRUKTIF & TIDAK BISA DIBATALKAN.**
+    """Reset instrumen DCS — singleton, tanpa sesi. **Destruktif, admin-only.**
 
-    Dalam satu transaksi: menghapus SELURUH responden DCS beserta jawabannya
-    (CASCADE), lalu mengembalikan status ke ``OPEN`` (``closed_at`` di-set
-    ``NULL``). Satu-satunya jalan resmi keluar dari status ``ANALYZED``
-    (terminal) — dipakai saat data yang sudah dianalisis ternyata data uji
-    coba/keliru dan instrumen perlu dibuka ulang untuk pengumpulan data yang
-    benar. Sah dipanggil dari status apa pun (OPEN/CLOSED/ANALYZED), idempoten.
+    Menghapus responden DCS lalu mengembalikan status ke ``OPEN``, **hanya bila
+    instrumen belum berisi jawaban sama sekali** (draft maupun submit). Bila
+    sudah ada jawaban, backend menolak dengan 409 ``instrument_has_responses``
+    dan tidak ada yang dihapus — galat ini diteruskan apa adanya sebagai
+    ``ToolError``. Jangan mencoba menembus penolakan itu dengan menghapus
+    responden satu per satu tanpa instruksi eksplisit pengguna.
 
-    Berbeda dari ``dcs_buka_ulang_instrumen`` yang non-destruktif (hanya
-    ``CLOSED → OPEN`` tanpa menghapus data): tool ini **membuang semua data
-    responden**. **Hanya dapat dijalankan oleh admin.**
+    Untuk membuka instrumen ``ANALYZED`` tanpa menghapus data, pakai
+    ``dcs_buka_ulang_instrumen``. ``dcs_reset_instrumen`` BUKAN jalan keluar
+    dari ``ANALYZED`` bila data sudah masuk.
 
     Returns:
-        Data instrumen DCS yang sudah diperbarui dengan status ``OPEN``.
+        Data instrumen DCS dengan status ``OPEN``.
+
+    Raises:
+        ToolError: 403 bila bukan admin; 409 ``instrument_has_responses`` bila
+            instrumen sudah berisi jawaban.
     """
     try:
         return await backend_post("/api/v1/dcs/instrumen/reset", ctx=ctx)
@@ -838,6 +875,9 @@ async def dcs_daftar_responden(
     offset: int = 0,
 ) -> dict:
     """Ambil daftar seluruh responden DCS (admin) — instrumen singleton, tanpa sesi.
+
+    Identitas responden = ``kode_orang`` pseudonim (``O-nnnn``, null bila tidak
+    terhubung ke partisipan); tidak ada nama.
 
     Args:
         limit: Jumlah item per halaman (maks 100, default 20).
@@ -881,12 +921,20 @@ async def dcs_tambah_responden(ctx: Context, partisipan_ids: list[str]) -> dict:
 async def dcs_analisis(ctx: Context) -> dict:
     """Jalankan dan ambil hasil analisis instrumen DCS — singleton, tanpa sesi.
 
-    Tersedia setelah instrumen berstatus CLOSED. K-Index (gabungan DCS+WCP)
-    dihitung otomatis oleh backend bila WCP sudah punya responden ber-submit —
-    tidak perlu (dan tidak ada lagi) parameter ``wcp_sesi_id``.
+    Tersedia setelah instrumen berstatus CLOSED. Bentuk keluaran ditentukan
+    field ``mode`` (union diskriminan) yang bergantung pada flag fungsi
+    ``WCP_DCS_SCORING`` (lihat ``fitur_status``):
 
+    - ``mode="SCORED"``: skor dan interpretasi tersedia.
+    - ``mode="RAW_ONLY"``: hanya data raw per item dan statistik deskriptif
+      raw. **Jangan** menyimpulkan skor sub-skala, label risiko, atau indeks
+      gabungan (``risk_flag``/``k_index``) dari data raw ini — kunci skor belum
+      disahkan.
+
+    K-Index (gabungan DCS+WCP) dihitung otomatis bila WCP sudah punya
+    responden ber-submit; tidak ada parameter ``wcp_sesi_id``.
     Returns:
-        Hasil analisis DCS per sub-skala, ``risk_flag``, dan ``k_index``.
+        Hasil analisis DCS sesuai ``mode`` (``SCORED`` atau ``RAW_ONLY``).
     """
     try:
         return await backend_post("/api/v1/dcs/analisis", ctx=ctx)
@@ -898,11 +946,14 @@ async def dcs_analisis(ctx: Context) -> dict:
 async def dcs_hasil(ctx: Context) -> dict:
     """Ambil hasil final instrumen DCS yang sudah dianalisis — singleton, tanpa sesi.
 
-    K-Index (gabungan DCS+WCP) sudah termasuk otomatis di hasil — tidak perlu
-    (dan tidak ada lagi) parameter ``wcp_sesi_id``.
+    Bentuk keluaran ditentukan field ``mode`` (flag ``WCP_DCS_SCORING``, lihat
+    ``fitur_status``): ``SCORED`` memuat skor dan interpretasi; ``RAW_ONLY``
+    hanya memuat data raw per item dan statistik deskriptif raw. Saat
+    ``RAW_ONLY``, **jangan** menyimpulkan skor sub-skala, label risiko, atau
+    indeks gabungan dari data raw.
 
     Returns:
-        Hasil final DCS termasuk skor per sub-skala, ``risk_flag``, dan ``k_index``.
+        Hasil final DCS sesuai ``mode`` (``SCORED`` atau ``RAW_ONLY``).
     """
     try:
         return await backend_get("/api/v1/dcs/hasil", ctx=ctx)
@@ -921,11 +972,14 @@ async def wcp_instrumen(ctx: Context) -> dict:
 
     WCP adalah instrumen **tunggal** (satu deployment = satu studi): TIDAK ADA
     konsep sesi/`sesi_id`. Satu baris instrumen mengalir lewat status
-    ``OPEN -> CLOSED -> ANALYZED``, dikelola migrasi (tidak ada create/delete).
+    ``OPEN -> CLOSED -> ANALYZED`` (balik ke ``OPEN`` lewat
+    ``wcp_buka_ulang_instrumen``), dikelola migrasi (tidak ada create/delete).
 
     Returns:
         Dict berisi ``id`` (selalu ``"wcp"``), ``status`` (OPEN | CLOSED |
-        ANALYZED), ``min_responden``, ``catatan``, ``closed_at``, ``created_at``.
+        ANALYZED), ``min_responden``, ``catatan``, ``closed_at``, ``created_at``,
+        serta penanda bank item: ``item_bank_hash`` (sha256 bank item aktif) dan
+        ``jumlah_item`` (jumlah item aktif).
     """
     try:
         return await backend_get("/api/v1/wcp/instrumen", ctx=ctx)
@@ -979,10 +1033,12 @@ async def wcp_tutup_instrumen(ctx: Context) -> dict:
 
 @mcp.tool
 async def wcp_buka_ulang_instrumen(ctx: Context) -> dict:
-    """Buka ulang instrumen WCP yang sudah ditutup — singleton, tanpa sesi.
+    """Buka ulang instrumen WCP — singleton, tanpa sesi. **Non-destruktif.**
 
-    Transisi status: CLOSED → OPEN. Dipakai bila perlu menerima jawaban
-    tambahan setelah instrumen sempat ditutup.
+    Transisi status ``CLOSED → OPEN`` **dan** ``ANALYZED → OPEN``; tidak ada
+    responden atau jawaban yang dihapus. Dipakai bila perlu menerima jawaban
+    tambahan atau mengulang analisis setelah instrumen ditutup/dianalisis.
+    Transisi dari status ``OPEN`` ditolak backend.
 
     Returns:
         Data instrumen WCP yang sudah diperbarui dengan status ``OPEN``.
@@ -995,21 +1051,25 @@ async def wcp_buka_ulang_instrumen(ctx: Context) -> dict:
 
 @mcp.tool
 async def wcp_reset_instrumen(ctx: Context) -> dict:
-    """Reset instrumen WCP — singleton, tanpa sesi. **DESTRUKTIF & TIDAK BISA DIBATALKAN.**
+    """Reset instrumen WCP — singleton, tanpa sesi. **Destruktif, admin-only.**
 
-    Dalam satu transaksi: menghapus SELURUH responden WCP beserta jawabannya
-    (CASCADE), lalu mengembalikan status ke ``OPEN`` (``closed_at`` di-set
-    ``NULL``). Satu-satunya jalan resmi keluar dari status ``ANALYZED``
-    (terminal) — dipakai saat data yang sudah dianalisis ternyata data uji
-    coba/keliru dan instrumen perlu dibuka ulang untuk pengumpulan data yang
-    benar. Sah dipanggil dari status apa pun (OPEN/CLOSED/ANALYZED), idempoten.
+    Menghapus responden WCP lalu mengembalikan status ke ``OPEN``, **hanya bila
+    instrumen belum berisi jawaban sama sekali** (draft maupun submit). Bila
+    sudah ada jawaban, backend menolak dengan 409 ``instrument_has_responses``
+    dan tidak ada yang dihapus — galat ini diteruskan apa adanya sebagai
+    ``ToolError``. Jangan mencoba menembus penolakan itu dengan menghapus
+    responden satu per satu tanpa instruksi eksplisit pengguna.
 
-    Berbeda dari ``wcp_buka_ulang_instrumen`` yang non-destruktif (hanya
-    ``CLOSED → OPEN`` tanpa menghapus data): tool ini **membuang semua data
-    responden**. **Hanya dapat dijalankan oleh admin.**
+    Untuk membuka instrumen ``ANALYZED`` tanpa menghapus data, pakai
+    ``wcp_buka_ulang_instrumen``. ``wcp_reset_instrumen`` BUKAN jalan keluar
+    dari ``ANALYZED`` bila data sudah masuk.
 
     Returns:
-        Data instrumen WCP yang sudah diperbarui dengan status ``OPEN``.
+        Data instrumen WCP dengan status ``OPEN``.
+
+    Raises:
+        ToolError: 403 bila bukan admin; 409 ``instrument_has_responses`` bila
+            instrumen sudah berisi jawaban.
     """
     try:
         return await backend_post("/api/v1/wcp/instrumen/reset", ctx=ctx)
@@ -1024,6 +1084,9 @@ async def wcp_daftar_responden(
     offset: int = 0,
 ) -> dict:
     """Ambil daftar seluruh responden WCP (admin) — instrumen singleton, tanpa sesi.
+
+    Identitas responden = ``kode_orang`` pseudonim (``O-nnnn``, null bila tidak
+    terhubung ke partisipan); tidak ada nama.
 
     Args:
         limit: Jumlah item per halaman (maks 100, default 20).
@@ -1067,10 +1130,18 @@ async def wcp_tambah_responden(ctx: Context, partisipan_ids: list[str]) -> dict:
 async def wcp_analisis(ctx: Context) -> dict:
     """Jalankan dan ambil hasil analisis instrumen WCP — singleton, tanpa sesi.
 
-    Tersedia setelah instrumen berstatus CLOSED.
+    Tersedia setelah instrumen berstatus CLOSED. Bentuk keluaran ditentukan
+    field ``mode`` (union diskriminan) yang bergantung pada flag fungsi
+    ``WCP_DCS_SCORING`` (lihat ``fitur_status``):
+
+    - ``mode="SCORED"``: skor dan interpretasi tersedia.
+    - ``mode="RAW_ONLY"``: hanya data raw per item dan statistik deskriptif
+      raw. **Jangan** menyimpulkan skor dimensi, label risiko, atau indeks
+      gabungan (``risk_flag``/``k_index``) dari data raw ini — kunci skor belum
+      disahkan.
 
     Returns:
-        Hasil analisis WCP per dimensi dan agregasi keseluruhan.
+        Hasil analisis WCP sesuai ``mode`` (``SCORED`` atau ``RAW_ONLY``).
     """
     try:
         return await backend_post("/api/v1/wcp/analisis", ctx=ctx)
@@ -1082,8 +1153,14 @@ async def wcp_analisis(ctx: Context) -> dict:
 async def wcp_hasil(ctx: Context) -> dict:
     """Ambil hasil final instrumen WCP yang sudah dianalisis — singleton, tanpa sesi.
 
+    Bentuk keluaran ditentukan field ``mode`` (flag ``WCP_DCS_SCORING``, lihat
+    ``fitur_status``): ``SCORED`` memuat skor dan interpretasi; ``RAW_ONLY``
+    hanya memuat data raw per item dan statistik deskriptif raw. Saat
+    ``RAW_ONLY``, **jangan** menyimpulkan skor dimensi, label risiko, atau
+    indeks gabungan dari data raw.
+
     Returns:
-        Hasil final WCP termasuk profil karakteristik per dimensi.
+        Hasil final WCP sesuai ``mode`` (``SCORED`` atau ``RAW_ONLY``).
     """
     try:
         return await backend_get("/api/v1/wcp/hasil", ctx=ctx)
@@ -2024,6 +2101,8 @@ async def ti_daftar_responden(
     Responden di sini adalah anggota SME panel untuk jabatan yang dikaji sesi
     ini (satu sesi TI = satu jabatan), bukan seluruh partisipan studi.
 
+    Identitas responden = ``kode_orang`` pseudonim (``O-nnnn``); tidak ada nama.
+
     Args:
         sesi_id: UUID sesi TI.
         limit: Jumlah item per halaman (maks 100, default 20).
@@ -2049,7 +2128,8 @@ async def ti_detail_responden(ctx: Context, responden_id: str) -> dict:
     """Ambil detail satu responden Task Inventory.
 
     Responden terikat ke satu sesi TI, yaitu satu analisis untuk satu
-    jabatan.
+    jabatan. Identitas responden = ``kode_orang`` pseudonim (``O-nnnn``);
+    respons tidak memuat nama.
 
     Args:
         responden_id: UUID responden.
@@ -2377,13 +2457,17 @@ async def ti_catalog_purge(ctx: Context) -> dict:
     TI aktif (untuk jabatan mana pun), bukan hanya sesi milik jabatan tertentu.
 
     Menghapus SELURUH baris ti_uraian_tugas, ti_tugas_pokok, ti_detil_tugas. DITOLAK
-    (409) bila masih ada sesi Task Inventory (status apa pun) — ti_seleksi/ti_tahap2/
-    ti_detail merujuk katalog lewat task_kode (bukan FK), purge saat ada sesi merusak
-    data transaksi. Panggil daftar_ti_sesi dulu untuk memastikan totalnya nol. Biasanya
+    dengan 409 ``catalog_in_use`` bila katalog masih dipakai sesi Task Inventory
+    atau sesi OPM (status apa pun) — ti_seleksi/ti_tahap2/ti_detail merujuk katalog
+    lewat task_kode (bukan FK), purge saat ada sesi merusak data transaksi. Panggil
+    daftar_ti_sesi dan daftar_opm_sesi dulu untuk memastikan totalnya nol. Biasanya
     diikuti ti_catalog_reseed untuk mengisi ulang.
 
     Returns:
         {"deleted": {"uraian_tugas": int, "detil_tugas": int, "tugas_pokok": int}}
+
+    Raises:
+        ToolError: 403 bila bukan admin; 409 ``catalog_in_use`` bila masih dipakai sesi.
     """
     try:
         return await backend_post("/api/v1/task-inventory/catalog/purge", ctx=ctx)
@@ -2420,6 +2504,8 @@ async def ti_catalog_reseed(ctx: Context) -> dict:
 @mcp.tool
 async def dcs_detail_responden(ctx: Context, responden_id: str) -> dict:
     """Ambil detail satu responden DCS (instrumen singleton, tanpa sesi).
+
+    Identitas responden = ``kode_orang`` pseudonim (``O-nnnn``); tidak ada nama.
 
     Args:
         responden_id: UUID responden.
@@ -2552,7 +2638,10 @@ async def dcs_perbarui_item(
     arah: str | None = None,
     urutan: int | None = None,
 ) -> dict:
-    """Perbarui item pernyataan DCS (master instrumen).
+    """Perbarui item pernyataan DCS (master instrumen, admin).
+
+    Ditolak backend dengan 409 ``instrument_has_responses`` bila instrumen
+    sudah berisi jawaban (teks item tidak boleh berubah setelah ada data).
 
     Args:
         item_id: UUID item.
@@ -2580,22 +2669,23 @@ async def dcs_perbarui_item(
 async def dcs_hapus_item(ctx: Context, item_id: str) -> dict:
     """Hapus satu item pernyataan DCS dari master instrumen (admin).
 
-    Menghapus item **permanen** dari katalog DCS. Jawaban tersimpan untuk item
-    ini ikut terhapus, dan analisis berikutnya dihitung tanpa item tersebut.
-
-    Prasyarat & batasan (ditegakkan backend):
+    Menghapus item **permanen** dari bank item DCS. Prasyarat & batasan
+    (ditegakkan backend):
 
     - **Hanya admin** (403 bila bukan admin).
-    - **Instrumen harus OPEN** (422 bila CLOSED/ANALYZED) — item tidak boleh
-      dihapus setelah/menjelang analisis final.
-    - **Tidak boleh menghapus item terakhir** sebuah sub-skala (422) — tiap
-      sub-skala harus punya minimal 1 item.
+    - **Instrumen belum boleh berisi jawaban**: bila sudah ada jawaban,
+      backend menjawab 409 ``instrument_has_responses`` dan tidak ada yang
+      dihapus (item yang sudah dijawab tidak pernah ikut terhapus diam-diam).
+    - **Tidak boleh menghapus item terakhir** sebuah sub-skala (422).
 
     Args:
         item_id: Kode item orisinal, mis. ``D5b``.
 
     Returns:
         Konfirmasi penghapusan (204 tanpa isi).
+
+    Raises:
+        ToolError: 403, 409 ``instrument_has_responses``, atau 422.
     """
     try:
         return await backend_delete(f"/api/v1/dcs/sub-skala/items/{item_id}", ctx=ctx)
@@ -2626,11 +2716,19 @@ async def dcs_kuesioner_saya(ctx: Context) -> list[dict]:
 async def dcs_hasil_responden(ctx: Context, responden_id: str) -> dict:
     """Ambil hasil analisis DCS untuk satu responden (instrumen singleton, tanpa sesi).
 
+    Hanya tersedia bila flag ``WCP_DCS_SCORING`` aktif (lihat ``fitur_status``).
+    Selama flag mati backend menjawab 409 ``scoring_key_not_approved``, yang
+    diteruskan sebagai ``ToolError``; jangan mengganti dengan skor hitungan
+    sendiri dari jawaban raw (``dcs_daftar_jawaban``).
+
     Args:
         responden_id: UUID responden.
 
     Returns:
         Hasil DCS per responden (skor per sub-skala dan agregat).
+
+    Raises:
+        ToolError: 409 ``scoring_key_not_approved`` bila skoring belum disahkan.
     """
     try:
         return await backend_get(f"/api/v1/dcs/hasil-responden/{responden_id}", ctx=ctx)
@@ -2647,6 +2745,8 @@ async def dcs_hasil_responden(ctx: Context, responden_id: str) -> dict:
 @mcp.tool
 async def wcp_detail_responden(ctx: Context, responden_id: str) -> dict:
     """Ambil detail satu responden WCP (instrumen singleton, tanpa sesi).
+
+    Identitas responden = ``kode_orang`` pseudonim (``O-nnnn``); tidak ada nama.
 
     Args:
         responden_id: UUID responden.
@@ -2778,7 +2878,10 @@ async def wcp_perbarui_item(
     reverse_type: str | None = None,
     urutan: int | None = None,
 ) -> dict:
-    """Perbarui item pernyataan WCP (master instrumen).
+    """Perbarui item pernyataan WCP (master instrumen, admin).
+
+    Ditolak backend dengan 409 ``instrument_has_responses`` bila instrumen
+    sudah berisi jawaban (teks item tidak boleh berubah setelah ada data).
 
     Args:
         item_id: UUID item.
@@ -2806,22 +2909,23 @@ async def wcp_perbarui_item(
 async def wcp_hapus_item(ctx: Context, item_id: str) -> dict:
     """Hapus satu item pernyataan WCP dari master instrumen (admin).
 
-    Menghapus item **permanen** dari katalog WCP. Jawaban tersimpan untuk item
-    ini ikut terhapus, dan analisis berikutnya dihitung tanpa item tersebut.
-
-    Prasyarat & batasan (ditegakkan backend):
+    Menghapus item **permanen** dari bank item WCP. Prasyarat & batasan
+    (ditegakkan backend):
 
     - **Hanya admin** (403 bila bukan admin).
-    - **Instrumen harus OPEN** (422 bila CLOSED/ANALYZED) — item tidak boleh
-      dihapus setelah/menjelang analisis final.
-    - **Tidak boleh menghapus item terakhir** sebuah dimensi (422) — tiap
-      dimensi harus punya minimal 1 item.
+    - **Instrumen belum boleh berisi jawaban**: bila sudah ada jawaban,
+      backend menjawab 409 ``instrument_has_responses`` dan tidak ada yang
+      dihapus (item yang sudah dijawab tidak pernah ikut terhapus diam-diam).
+    - **Tidak boleh menghapus item terakhir** sebuah dimensi (422).
 
     Args:
         item_id: Kode item orisinal, mis. ``SC1a``.
 
     Returns:
         Konfirmasi penghapusan (204 tanpa isi).
+
+    Raises:
+        ToolError: 403, 409 ``instrument_has_responses``, atau 422.
     """
     try:
         return await backend_delete(f"/api/v1/wcp/dimensi/items/{item_id}", ctx=ctx)
@@ -2852,11 +2956,19 @@ async def wcp_kuesioner_saya(ctx: Context) -> list[dict]:
 async def wcp_hasil_responden(ctx: Context, responden_id: str) -> dict:
     """Ambil hasil analisis WCP untuk satu responden (instrumen singleton, tanpa sesi).
 
+    Hanya tersedia bila flag ``WCP_DCS_SCORING`` aktif (lihat ``fitur_status``).
+    Selama flag mati backend menjawab 409 ``scoring_key_not_approved``, yang
+    diteruskan sebagai ``ToolError``; jangan mengganti dengan skor hitungan
+    sendiri dari jawaban raw (``wcp_daftar_jawaban``).
+
     Args:
         responden_id: UUID responden.
 
     Returns:
         Hasil WCP per responden (skor per dimensi dan agregat).
+
+    Raises:
+        ToolError: 409 ``scoring_key_not_approved`` bila skoring belum disahkan.
     """
     try:
         return await backend_get(f"/api/v1/wcp/hasil-responden/{responden_id}", ctx=ctx)
@@ -3140,7 +3252,8 @@ async def opm_daftar_responden(
     seluruh anggota SME panel jabatan (berubah sejak
     `anjab-abk-backend#37`). Penambahan responden manual setelahnya (lihat
     ``opm_tambah_responden``/``opm_tambah_responden_banyak``) tetap mensyaratkan
-    keanggotaan SME panel jabatan sesi ini.
+    keanggotaan SME panel jabatan sesi ini. Identitas responden =
+    ``kode_orang`` pseudonim (``O-nnnn``); tidak ada nama.
 
     Args:
         sesi_id: UUID sesi OPM.
@@ -3167,7 +3280,8 @@ async def opm_detail_responden(ctx: Context, responden_id: str) -> dict:
     """Ambil detail satu responden OPM.
 
     Responden terikat ke satu sesi OPM (satu analisis untuk satu jabatan).
-    Diakses admin atau pemilik responden itu sendiri.
+    Diakses admin atau pemilik responden itu sendiri. Identitas responden =
+    ``kode_orang`` pseudonim (``O-nnnn``); respons tidak memuat nama.
 
     Args:
         responden_id: UUID responden OPM.
@@ -3231,6 +3345,42 @@ async def opm_daftar_jawaban(ctx: Context, responden_id: str) -> list[dict]:
 
 
 @mcp.tool
+async def opm_daftar_pengecualian(
+    ctx: Context,
+    sesi_id: str,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Ambil register pengecualian TI-OPM sebuah sesi OPM (admin, read-only).
+
+    Register mencatat task yang tak bisa dinilai karena ketidakcocokan TI-OPM.
+    Tiga ``alasan``: ``TI_DETAIL_UNMATCHED`` (kode terpilih TI tidak ada di
+    katalog saat snapshot), ``OPM_STD_MISSING`` (task tanpa ketiga nilai
+    standar), ``OPM_RATING_MISSING`` (task tanpa satu pun rating saat analisis).
+    Register hanya mencatat: **jangan** mengisi nilai standar atau rating
+    secara otomatis atau mengarang nilai pengganti; keputusannya milik tim kajian.
+
+    Args:
+        sesi_id: UUID sesi OPM.
+        limit: Jumlah item per halaman (default 50).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict ``{"items": [{"task_kode", "alasan", "keterangan", "status",
+        "created_at", ...}], "total": int}``.
+    """
+    try:
+        return await backend_get(
+            f"/api/v1/opm/sesi/{sesi_id}/pengecualian",
+            ctx=ctx,
+            limit=limit,
+            offset=offset,
+        )
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
 async def opm_analisis(ctx: Context, sesi_id: str) -> dict:
     """Jalankan analisis OPM untuk sesi yang sudah ditutup (transisi ke ANALYZED).
 
@@ -3238,6 +3388,11 @@ async def opm_analisis(ctx: Context, sesi_id: str) -> dict:
     menjadi skor prioritas per task + badge (Selection/Workload Essential).
     Tersedia setelah sesi berstatus CLOSED. Hasil ini spesifik untuk satu
     jabatan (satu sesi OPM).
+
+    Task yang tak bisa dinilai (kode terpilih TI tak ada di katalog, tanpa
+    nilai standar, atau tanpa rating) tidak dihitung dan tidak diisi otomatis:
+    ia dicatat di register pengecualian (``opm_daftar_pengecualian``) dan nilai
+    skornya ``null`` — jangan mengarang nilainya.
 
     Args:
         sesi_id: UUID sesi OPM.
@@ -3259,7 +3414,9 @@ async def opm_hasil(ctx: Context, sesi_id: str) -> dict:
     — respons memuat ``cabang`` (bisa ``null`` untuk sesi lama) untuk
     membedakan hasil dua sesi jabatan yang sama pada cabang berbeda. Untuk
     membandingkan beberapa jabatan/cabang dalam studi yang sama, panggil
-    ``opm_hasil`` per sesi.
+    ``opm_hasil`` per sesi. Task yang masuk register pengecualian
+    (``opm_daftar_pengecualian``) bernilai ``null``; jangan diisi atau
+    diperkirakan sendiri.
 
     Args:
         sesi_id: UUID sesi OPM.
