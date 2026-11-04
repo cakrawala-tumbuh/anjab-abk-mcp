@@ -6,6 +6,11 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Ditambahkan
+
+- Target `make test-arm64` dan job CI `arm64` (runner `ubuntu-24.04-arm`): uji asap image
+  runtime `linux/arm64` (`uname -m` = `aarch64`, HEALTHCHECK `healthy` dalam 60 detik).
+
 ### Diperbaiki
 
 - `detail_sme_panel` kini hanya memanggil `GET /api/v1/sme-panel/{id}`; anggota
