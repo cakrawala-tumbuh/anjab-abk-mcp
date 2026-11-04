@@ -6,6 +6,15 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Diperbaiki
+
+- `detail_sme_panel` kini hanya memanggil `GET /api/v1/sme-panel/{id}`; anggota
+  dibaca dari `partisipan_ids` (key `anggota` dihapus, sebelumnya selalu gagal 405).
+- `ti_submit_seleksi` kini memakai `PUT .../seleksi` lalu `POST .../seleksi/submit`
+  (sebelumnya POST ke `.../seleksi` gagal 405).
+- Docstring `ti_alihkan_responden` dan `opm_alihkan_responden` menyebut `kode_orang`
+  menggantikan `nama`.
+
 ## [0.20.1] - 2026-11-02
 
 ### Diubah

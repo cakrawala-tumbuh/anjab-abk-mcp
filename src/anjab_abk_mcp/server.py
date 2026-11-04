@@ -335,16 +335,18 @@ async def daftar_sme_panel(
 async def detail_sme_panel(ctx: Context, panel_id: str) -> dict:
     """Ambil detail SME Panel beserta daftar anggotanya.
 
+    Memanggil satu GET ``/api/v1/sme-panel/{panel_id}`` dan mengembalikan
+    responsnya apa adanya. Backend tidak menyediakan GET ``.../anggota``.
+
     Args:
         panel_id: UUID SME Panel (dari ``daftar_sme_panel``).
 
     Returns:
-        Dict berisi data panel dan key ``anggota`` (list partisipan anggota).
+        Dict data panel. Anggota dibaca dari ``partisipan_ids`` (list UUID
+        partisipan); tidak ada key ``anggota``.
     """
     try:
-        panel = await backend_get(f"/api/v1/sme-panel/{panel_id}", ctx=ctx)
-        anggota = await backend_get(f"/api/v1/sme-panel/{panel_id}/anggota", ctx=ctx)
-        return {**panel, "anggota": anggota}
+        return await backend_get(f"/api/v1/sme-panel/{panel_id}", ctx=ctx)
     except BackendError as exc:
         _raise_tool_error(exc)
 
@@ -2173,7 +2175,7 @@ async def ti_alihkan_responden(
 ) -> dict:
     """Alihkan kepemilikan responden Task Inventory ke partisipan lain.
 
-    Mengubah HANYA ``partisipan_id`` (dan ``nama``) pada baris responden —
+    Mengubah HANYA ``partisipan_id`` (dan ``kode_orang``) pada baris responden —
     seluruh jawaban serta status & timestamp kirim (``tahap1_submit`` dkk.)
     ikut pindah apa adanya, bukan disalin ulang. Berlaku juga untuk sesi TI
     yang sudah berstatus TAHAP3.
@@ -2193,7 +2195,7 @@ async def ti_alihkan_responden(
             partisipan tujuan sudah menjadi responden lain di sesi yang sama.
 
     Returns:
-        Data responden TI setelah pengalihan — ``partisipan_id``/``nama``
+        Data responden TI setelah pengalihan — ``partisipan_id``/``kode_orang``
         sudah berganti, jawaban & status kirim tetap utuh.
     """
     try:
@@ -2237,19 +2239,22 @@ async def ti_submit_seleksi(ctx: Context, responden_id: str, task_kode: list[str
     ``task_kode`` diambil dari katalog task milik jabatan yang dikaji sesi TI
     tempat responden ini terdaftar (satu sesi TI = satu jabatan).
 
+    Dua langkah berurutan: ``PUT .../seleksi`` menyimpan draft seleksi, lalu
+    ``POST .../seleksi/submit`` memfinalisasi. Bila submit gagal setelah PUT
+    berhasil, error diteruskan tetapi draft tetap tersimpan (tidak ada
+    rollback dari MCP); panggil ulang tool ini atau perbaiki sebabnya.
+
     Args:
         responden_id: UUID responden.
         task_kode: Daftar kode task yang dipilih relevan untuk jabatan.
 
     Returns:
-        Konfirmasi penyimpanan seleksi.
+        Respons backend dari langkah submit (finalisasi seleksi).
     """
     try:
-        return await backend_post(
-            f"/api/v1/task-inventory/sesi/responden/{responden_id}/seleksi",
-            ctx=ctx,
-            body={"task_kode": task_kode},
-        )
+        base = f"/api/v1/task-inventory/sesi/responden/{responden_id}/seleksi"
+        await backend_put(base, ctx=ctx, body={"task_kode": task_kode})
+        return await backend_post(f"{base}/submit", ctx=ctx)
     except BackendError as exc:
         _raise_tool_error(exc)
 
@@ -3579,7 +3584,7 @@ async def opm_alihkan_responden(
 ) -> dict:
     """Alihkan kepemilikan responden OPM ke partisipan lain.
 
-    Mengubah HANYA ``partisipan_id`` (dan ``nama``) pada baris responden —
+    Mengubah HANYA ``partisipan_id`` (dan ``kode_orang``) pada baris responden —
     seluruh jawaban serta status & timestamp kirim (``sudah_submit`` dkk.)
     ikut pindah apa adanya, bukan disalin ulang. Berlaku juga untuk sesi OPM
     yang kuota respondennya sudah penuh.
@@ -3599,7 +3604,7 @@ async def opm_alihkan_responden(
             partisipan tujuan sudah menjadi responden lain di sesi yang sama.
 
     Returns:
-        Data responden OPM setelah pengalihan — ``partisipan_id``/``nama``
+        Data responden OPM setelah pengalihan — ``partisipan_id``/``kode_orang``
         sudah berganti, jawaban & status kirim tetap utuh.
     """
     try:

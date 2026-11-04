@@ -1971,3 +1971,93 @@ async def test_deskripsi_hasil_wcp_dcs_menyebut_mode():
         d = t.description or ""
         if "risk_flag" in d or "k_index" in d:
             assert "mode" in d, t.name
+
+
+@pytest.mark.asyncio
+async def test_detail_sme_panel_satu_get_tanpa_anggota():
+    """Hanya satu GET ke panel; hasil apa adanya (anggota lewat ``partisipan_ids``)."""
+    payload = {"id": "pnl-1", "partisipan_ids": ["par-1", "par-2"]}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("detail_sme_panel", {"panel_id": "pnl-1"})
+    assert result.data == payload
+    assert m.await_count == 1
+    assert m.await_args.args[0] == "/api/v1/sme-panel/pnl-1"
+
+
+@pytest.mark.asyncio
+async def test_ti_submit_seleksi_put_lalu_post_submit():
+    """Urutan: PUT draft ``task_kode`` lalu POST ``/seleksi/submit`` tanpa body."""
+    urutan: list[str] = []
+    base = "/api/v1/task-inventory/sesi/responden/trsp-1/seleksi"
+
+    async def fake_put(path, **kw):
+        urutan.append(f"PUT {path}")
+        return {"ok": "draft"}
+
+    async def fake_post(path, **kw):
+        urutan.append(f"POST {path}")
+        return {"status": "submitted"}
+
+    with patch(_PUT, side_effect=fake_put) as mput, patch(_POST, side_effect=fake_post) as mpost:
+        async with Client(mcp) as client:
+            result = await client.call_tool(
+                "ti_submit_seleksi", {"responden_id": "trsp-1", "task_kode": ["T1", "T2"]}
+            )
+    assert urutan == [f"PUT {base}", f"POST {base}/submit"]
+    assert mput.call_args.kwargs["body"] == {"task_kode": ["T1", "T2"]}
+    assert mpost.call_args.kwargs.get("body") is None
+    assert result.data == {"status": "submitted"}
+
+
+@pytest.mark.asyncio
+async def test_ti_submit_seleksi_put_gagal_submit_tidak_dipanggil():
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with (
+        patch(_PUT, new_callable=AsyncMock, side_effect=BackendError("Backend error 422: x")),
+        patch(_POST, new_callable=AsyncMock) as mpost,
+    ):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool(
+                    "ti_submit_seleksi", {"responden_id": "trsp-1", "task_kode": ["T1"]}
+                )
+    assert "422" in str(exc_info.value)
+    mpost.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ti_submit_seleksi_submit_gagal_error_diteruskan_put_sudah_terjadi():
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with (
+        patch(_PUT, new_callable=AsyncMock, return_value={}) as mput,
+        patch(
+            _POST,
+            new_callable=AsyncMock,
+            side_effect=BackendError("Backend error 422: seleksi kosong"),
+        ),
+    ):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool(
+                    "ti_submit_seleksi", {"responden_id": "trsp-1", "task_kode": ["T1"]}
+                )
+    assert "422" in str(exc_info.value)
+    mput.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_deskripsi_alihkan_responden_tanpa_nama_pada_returns():
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in await client.list_tools()}
+    for nama_tool in ("ti_alihkan_responden", "opm_alihkan_responden"):
+        desc = tools[nama_tool].description
+        returns = desc.split("Returns:")[-1]
+        assert "``nama``" not in returns
+        assert "kode_orang" in returns
