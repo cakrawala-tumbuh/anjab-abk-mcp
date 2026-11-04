@@ -12,6 +12,7 @@ Server ini bertindak sebagai adapter antara Claude dan REST API [`anjab-abk-back
 - Tools untuk alat ukur **WCP** (Work Characteristics Profile): instrumen singleton (tanpa sesi) — satu deployment = satu studi
 - Tools untuk alat ukur **Time Study** (TS)
 - Tool `fitur_status`: membaca flag fungsi backend (mis. `WCP_DCS_SCORING`) — hasil WCP/DCS berbentuk `SCORED` atau `RAW_ONLY` sesuai flag
+- Tool `status_skema_backend`: membaca status skema basis data backend (revisi vs head kode, selisih model); read-only, token admin
 - Tool `opm_daftar_pengecualian`: membaca register pengecualian TI-OPM sebuah sesi OPM (task yang tak bisa dinilai)
 - Auth via Authentik OAuth (Pola B) + API key statis
 - Mendukung stdio, Claude Code (remote), dan Claude Web (HTTP/SSE)

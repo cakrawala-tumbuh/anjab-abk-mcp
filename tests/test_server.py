@@ -2061,3 +2061,39 @@ async def test_deskripsi_alihkan_responden_tanpa_nama_pada_returns():
         returns = desc.split("Returns:")[-1]
         assert "``nama``" not in returns
         assert "kode_orang" in returns
+
+
+@pytest.mark.asyncio
+async def test_status_skema_backend_terdaftar():
+    async with Client(mcp) as client:
+        names = {t.name for t in await client.list_tools()}
+    assert "status_skema_backend" in names
+
+
+@pytest.mark.asyncio
+async def test_status_skema_backend_meneruskan_respons_apa_adanya():
+    payload = {
+        "revisi_db": ["c1eacaf37063"],
+        "head_kode": ["c1eacaf37063"],
+        "selaras": True,
+        "selisih_model": [],
+        "selisih_terbaca": True,
+    }
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("status_skema_backend", {})
+    assert result.data == payload
+    assert m.call_args.args[0] == "/api/v1/system/skema"
+
+
+@pytest.mark.asyncio
+async def test_status_skema_backend_403_jadi_tool_error():
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with patch(_GET, new_callable=AsyncMock, side_effect=BackendError("Backend error 403: x")):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool("status_skema_backend", {})
+    assert "403" in str(exc_info.value)

@@ -8,6 +8,8 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Ditambahkan
 
+- Tool `status_skema_backend`: membaca `GET /api/v1/system/skema` (revisi skema basis data vs
+  head kode dan model ORM; read-only, perlu token admin).
 - Target `make test-arm64` dan job CI `arm64` (runner `ubuntu-24.04-arm`): uji asap image
   runtime `linux/arm64` (`uname -m` = `aarch64`, HEALTHCHECK `healthy` dalam 60 detik).
 

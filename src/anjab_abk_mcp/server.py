@@ -754,6 +754,31 @@ async def fitur_status(ctx: Context) -> dict:
         _raise_tool_error(exc)
 
 
+@mcp.tool
+async def status_skema_backend(ctx: Context) -> dict:
+    """Baca status skema basis data backend terhadap kode (read-only, perlu token admin).
+
+    Membandingkan revisi migrasi pada basis data aktif dengan head migrasi di kode
+    backend, dan struktur skema aktual dengan model ORM. Hanya membaca: tidak
+    menjalankan migrasi dan tidak memuat data baris. Dipakai untuk memastikan
+    baseline skema sebelum mengandalkan fungsi yang bergantung pada migrasi tertentu.
+    Token non-admin ditolak backend (403) dan muncul sebagai galat tool.
+
+    Returns:
+        Dict apa adanya dari backend dengan kunci: ``revisi_db`` (list revisi di
+        tabel ``alembic_version``; kosong bila tabel tidak ada), ``head_kode`` (list
+        revisi head di kode), ``selaras`` (``True`` hanya bila ``revisi_db`` dan
+        ``head_kode`` sama dan tidak kosong; tidak memeriksa struktur), ``selisih_model``
+        (list ``"<operasi>:<nama objek>"``, mis. ``"remove_table:tabel_liar"``, selisih
+        skema aktual terhadap model ORM), dan ``selisih_terbaca`` (``False`` bila
+        pembandingan model gagal sehingga ``selisih_model`` tidak andal).
+    """
+    try:
+        return await backend_get("/api/v1/system/skema", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
 # ════════════════════════════════════════════════════════════════════════════════
 # DOMAIN: DCS (Dimension Classification Survey)
 # ════════════════════════════════════════════════════════════════════════════════
