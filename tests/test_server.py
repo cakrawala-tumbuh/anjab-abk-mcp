@@ -2201,3 +2201,79 @@ async def test_tool_ai_galat_backend_jadi_tool_error(tool, args, kode):
             with pytest.raises(ToolError) as exc_info:
                 await client.call_tool(tool, args)
     assert kode in str(exc_info.value)
+
+
+# ── narasi_hitungan_antrean (hanya hitungan, K-16) ───────────────────────────────
+
+
+_PENANDA = "PENANDA-ISI-RAHASIA"
+
+
+def _halaman_antrean(total: int, items: list | None = None) -> dict:
+    return {"items": items or [], "total": total, "limit": 1, "offset": 0}
+
+
+@pytest.mark.asyncio
+async def test_narasi_hitungan_antrean_empat_kunci_dari_total():
+    totals = {"AI_DRAFT": 3, "TEAM_REVIEW": 5, "NEED_FACT": 2}
+
+    async def _fake(path, **kw):
+        return _halaman_antrean(totals[kw["status"]])
+
+    with patch(_GET, new_callable=AsyncMock, side_effect=_fake):
+        async with Client(mcp) as client:
+            result = await client.call_tool("narasi_hitungan_antrean", {})
+    assert result.data == {"AI_DRAFT": 3, "TEAM_REVIEW": 5, "NEED_FACT": 2, "total": 10}
+
+
+@pytest.mark.asyncio
+async def test_narasi_hitungan_antrean_tiga_panggilan_limit_satu():
+    with patch(_GET, new_callable=AsyncMock, return_value=_halaman_antrean(0)) as m:
+        async with Client(mcp) as client:
+            await client.call_tool("narasi_hitungan_antrean", {})
+    assert m.call_count == 3
+    assert [c.args[0] for c in m.call_args_list] == ["/api/v1/narasi/antrean"] * 3
+    assert [c.kwargs["status"] for c in m.call_args_list] == [
+        "AI_DRAFT",
+        "TEAM_REVIEW",
+        "NEED_FACT",
+    ]
+    assert all(c.kwargs["limit"] == 1 and c.kwargs["offset"] == 0 for c in m.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_narasi_hitungan_antrean_tidak_membawa_items_atau_teks():
+    baris = [{"id": "n-1", "teks": _PENANDA, "unit": _PENANDA}]
+    with patch(_GET, new_callable=AsyncMock, return_value=_halaman_antrean(1, baris)):
+        async with Client(mcp) as client:
+            result = await client.call_tool("narasi_hitungan_antrean", {})
+    assert set(result.data) == {"AI_DRAFT", "TEAM_REVIEW", "NEED_FACT", "total"}
+    assert _PENANDA not in str(result.data)
+    assert "items" not in result.data
+
+
+@pytest.mark.asyncio
+async def test_narasi_hitungan_antrean_status_kedua_gagal_jadi_tool_error():
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    efek = [_halaman_antrean(4), BackendError("Backend error 500: x")]
+    with patch(_GET, new_callable=AsyncMock, side_effect=efek):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool("narasi_hitungan_antrean", {})
+    assert "500" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_narasi_hitungan_antrean_403_jadi_tool_error():
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with patch(_GET, new_callable=AsyncMock, side_effect=BackendError("Backend error 403: x")):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool("narasi_hitungan_antrean", {})
+    assert "403" in str(exc_info.value)

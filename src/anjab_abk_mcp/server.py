@@ -889,6 +889,37 @@ async def ai_detail_run(ctx: Context, run_id: str) -> dict:
         _raise_tool_error(exc)
 
 
+_STATUS_ANTREAN = ("AI_DRAFT", "TEAM_REVIEW", "NEED_FACT")
+
+
+@mcp.tool
+async def narasi_hitungan_antrean(ctx: Context) -> dict:
+    """Hitung kasus antrean tinjauan narasi per status (hanya angka; perlu grup ``tim-kajian``).
+
+    Memanggil ``GET /api/v1/narasi/antrean`` satu kali per status ``AI_DRAFT``,
+    ``TEAM_REVIEW``, dan ``NEED_FACT`` dengan ``limit=1`` dan hanya membaca ``total``.
+    Hanya metadata (K-16): baris, teks narasi, dan kode lingkup tidak pernah melewati
+    MCP. Tidak ada filter instrumen/unit/periode. Rute backend menuntut grup
+    ``tim-kajian``; ``admin`` tanpa grup itu ditolak 403. Bila salah satu panggilan
+    gagal, seluruh tool gagal (galat tool) tanpa hitungan parsial atau nol pengganti.
+
+    Returns:
+        Dict ``{"AI_DRAFT": int, "TEAM_REVIEW": int, "NEED_FACT": int, "total": int}``;
+        ``total`` adalah jumlah ketiga status.
+    """
+    hasil: dict[str, int] = {}
+    try:
+        for status in _STATUS_ANTREAN:
+            halaman = await backend_get(
+                "/api/v1/narasi/antrean", ctx=ctx, status=status, limit=1, offset=0
+            )
+            hasil[status] = int(halaman["total"])  # type: ignore[index]
+    except BackendError as exc:
+        _raise_tool_error(exc)
+    hasil["total"] = sum(hasil.values())
+    return hasil
+
+
 # ════════════════════════════════════════════════════════════════════════════════
 # DOMAIN: DCS (Dimension Classification Survey)
 # ════════════════════════════════════════════════════════════════════════════════

@@ -8,6 +8,9 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Ditambahkan
 
+- Tool baca `narasi_hitungan_antrean`: hitungan kasus antrean tinjauan narasi per status
+  (`AI_DRAFT`, `TEAM_REVIEW`, `NEED_FACT`) lewat `GET /api/v1/narasi/antrean` (`limit=1`, hanya
+  `total`); tanpa baris/teks, perlu grup `tim-kajian`.
 - Tool baca `ai_saklar_status`, `ai_daftar_run`, `ai_detail_run`: saklar AI dan register run AI
   (`/api/v1/system/ai/*`), hanya metadata; `masukan`/`keluaran` dibuang oleh `_tanpa_isi_run`.
 - Tool `status_skema_backend`: membaca `GET /api/v1/system/skema` (revisi skema basis data vs
