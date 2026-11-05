@@ -95,6 +95,30 @@ def _raise_tool_error(exc: BackendError) -> None:
     raise ToolError(str(exc)) from exc
 
 
+_KUNCI_ISI_RUN = ("masukan", "keluaran")
+
+
+def _tanpa_isi_run(data: object) -> object:
+    """Buang kunci isi run AI (``masukan`` dan ``keluaran``) dari respons backend.
+
+    Pengaman berlapis K-16: ``AiRunRead`` backend memang tidak memuat kedua kunci itu,
+    tetapi perubahan backend tidak boleh membuka isi run lewat MCP. Menerima satu run
+    (dict) atau halaman (dict ber-kunci ``items``); nilai lain dikembalikan apa adanya.
+
+    Args:
+        data: Respons backend untuk daftar atau detail run.
+
+    Returns:
+        Salinan ``data`` tanpa kunci ``masukan``/``keluaran`` pada tiap run.
+    """
+    if not isinstance(data, dict):
+        return data
+    bersih = {k: v for k, v in data.items() if k not in _KUNCI_ISI_RUN}
+    if isinstance(bersih.get("items"), list):
+        bersih["items"] = [_tanpa_isi_run(item) for item in bersih["items"]]
+    return bersih
+
+
 # ── Resource: versi server ────────────────────────────────────────────────────
 @mcp.resource("config://version")
 def versi_server() -> str:
@@ -775,6 +799,92 @@ async def status_skema_backend(ctx: Context) -> dict:
     """
     try:
         return await backend_get("/api/v1/system/skema", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# SISTEM — AI (hanya metadata, K-16)
+# ════════════════════════════════════════════════════════════════════════════════
+
+
+@mcp.tool
+async def ai_saklar_status(ctx: Context) -> dict:
+    """Baca status saklar (kill switch) layanan AI draf narasi (read-only, perlu token admin).
+
+    Hanya membaca. Tidak ada tool MCP yang mengubah saklar: flag ``AI_NARRATIVE_DRAFT``
+    hanya berubah lewat environment backend + restart, dan event matikan/hidupkan
+    dilakukan admin lewat layar web. Token non-admin ditolak backend (403) dan muncul
+    sebagai galat tool.
+
+    Returns:
+        Dict apa adanya dari backend: ``layanan``, ``flag_aktif`` (nilai flag env),
+        ``dimatikan`` (event terakhir adalah MATIKAN), ``boleh_jalan`` (hanya ``True``
+        bila flag aktif dan tidak dimatikan), ``alasan`` event terakhir, dan metadata
+        event terakhir bila ada.
+    """
+    try:
+        return await backend_get("/api/v1/system/ai/saklar", ctx=ctx)
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def ai_daftar_run(
+    ctx: Context,
+    fungsi: str | None = None,
+    status_qa: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    """Ambil daftar register run AI, terbaru dulu (metadata saja, perlu token admin).
+
+    Hanya metadata teknis: tidak ada isi masukan maupun keluaran (draf) run; kunci
+    ``masukan``/``keluaran`` selalu dibuang. ``status_qa`` adalah status teknis
+    pemeriksaan otomatis, bukan penilaian mutu: jangan menyimpulkan baik-buruknya
+    draf dari nilainya. Token non-admin ditolak backend (403) dan muncul sebagai
+    galat tool.
+
+    Args:
+        fungsi: Filter fungsi AI (mis. ``draf_narasi``); kosong = semua.
+        status_qa: Filter status QA teknis: ``MENUNGGU``, ``LOLOS``, ``KARANTINA``,
+            ``EVIDENCE_GAP``, ``DIBLOKIR``, atau ``GAGAL``; kosong = semua.
+        limit: Jumlah item per halaman (default 20).
+        offset: Jumlah item yang dilewati untuk paginasi (default 0).
+
+    Returns:
+        Dict halaman dengan ``items`` (metadata run), ``total``, ``limit``, ``offset``.
+    """
+    params: dict[str, object] = {"limit": limit, "offset": offset}
+    if fungsi is not None:
+        params["fungsi"] = fungsi
+    if status_qa is not None:
+        params["status_qa"] = status_qa
+    try:
+        return _tanpa_isi_run(await backend_get("/api/v1/system/ai/runs", ctx=ctx, **params))
+    except BackendError as exc:
+        _raise_tool_error(exc)
+
+
+@mcp.tool
+async def ai_detail_run(ctx: Context, run_id: str) -> dict:
+    """Ambil metadata satu run AI (tanpa isi masukan/keluaran, perlu token admin).
+
+    Hanya metadata teknis; isi draf tidak pernah diekspos lewat MCP. ``status_qa``
+    bukan penilaian mutu draf. Run tak ada = 404, non-admin = 403; keduanya muncul
+    sebagai galat tool.
+
+    Args:
+        run_id: UUID run AI.
+
+    Returns:
+        Dict metadata run: ``id``, ``fungsi``, ``prompt_version``, ``model_diminta``,
+        ``model_dilayani``, ``protocol_id``, ``sumber`` (id + hash), ``status_qa``,
+        ``kode_qa``, ``stop_reason``, jumlah token, ``dibuat_oleh``, ``created_at``,
+        ``selesai_at``.
+    """
+    try:
+        return _tanpa_isi_run(await backend_get(f"/api/v1/system/ai/runs/{run_id}", ctx=ctx))
     except BackendError as exc:
         _raise_tool_error(exc)
 

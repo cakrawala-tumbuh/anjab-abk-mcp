@@ -2097,3 +2097,107 @@ async def test_status_skema_backend_403_jadi_tool_error():
             with pytest.raises(ToolError) as exc_info:
                 await client.call_tool("status_skema_backend", {})
     assert "403" in str(exc_info.value)
+
+
+_RUN_BERISI = {
+    "id": "r-1",
+    "fungsi": "draf_narasi",
+    "status_qa": "LOLOS",
+    "masukan": {"rahasia": "pii"},
+    "keluaran": {"draf": "isi"},
+}
+
+
+@pytest.mark.asyncio
+async def test_tool_ai_terdaftar_dan_tanpa_penulis_atau_pengubah_saklar():
+    async with Client(mcp) as client:
+        names = {t.name for t in await client.list_tools()}
+    assert {"ai_saklar_status", "ai_daftar_run", "ai_detail_run"} <= names
+    assert [n for n in names if "saklar" in n] == ["ai_saklar_status"]
+    for n in names:
+        assert "matikan" not in n and "hidupkan" not in n
+        assert "narasi" not in n or not n.startswith(("buat_", "tulis_", "tinjau_", "setujui_"))
+
+
+@pytest.mark.asyncio
+async def test_ai_saklar_status_meneruskan_respons_apa_adanya():
+    payload = {
+        "layanan": "AI_NARRATIVE_DRAFT",
+        "flag_aktif": False,
+        "dimatikan": False,
+        "boleh_jalan": False,
+        "alasan": None,
+    }
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("ai_saklar_status", {})
+    assert result.data == payload
+    assert m.call_args.args[0] == "/api/v1/system/ai/saklar"
+
+
+@pytest.mark.asyncio
+async def test_ai_daftar_run_meneruskan_filter_limit_offset():
+    payload = {"items": [], "total": 0, "limit": 5, "offset": 10}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload) as m:
+        async with Client(mcp) as client:
+            await client.call_tool(
+                "ai_daftar_run",
+                {"fungsi": "draf_narasi", "status_qa": "KARANTINA", "limit": 5, "offset": 10},
+            )
+    assert m.call_args.args[0] == "/api/v1/system/ai/runs"
+    assert m.call_args.kwargs["fungsi"] == "draf_narasi"
+    assert m.call_args.kwargs["status_qa"] == "KARANTINA"
+    assert m.call_args.kwargs["limit"] == 5
+    assert m.call_args.kwargs["offset"] == 10
+
+
+@pytest.mark.asyncio
+async def test_ai_daftar_run_tidak_mengirim_filter_none():
+    with patch(_GET, new_callable=AsyncMock, return_value={"items": []}) as m:
+        async with Client(mcp) as client:
+            await client.call_tool("ai_daftar_run", {})
+    assert "fungsi" not in m.call_args.kwargs
+    assert "status_qa" not in m.call_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_ai_daftar_run_membuang_masukan_dan_keluaran():
+    payload = {"items": [dict(_RUN_BERISI)], "total": 1, "limit": 20, "offset": 0}
+    with patch(_GET, new_callable=AsyncMock, return_value=payload):
+        async with Client(mcp) as client:
+            result = await client.call_tool("ai_daftar_run", {})
+    item = result.data["items"][0]
+    assert "masukan" not in item and "keluaran" not in item
+    assert item["id"] == "r-1"
+    assert result.data["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_ai_detail_run_membuang_masukan_dan_keluaran():
+    with patch(_GET, new_callable=AsyncMock, return_value=dict(_RUN_BERISI)) as m:
+        async with Client(mcp) as client:
+            result = await client.call_tool("ai_detail_run", {"run_id": "r-1"})
+    assert m.call_args.args[0] == "/api/v1/system/ai/runs/r-1"
+    assert "masukan" not in result.data and "keluaran" not in result.data
+    assert result.data["status_qa"] == "LOLOS"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool", "args", "kode"),
+    [
+        ("ai_saklar_status", {}, "403"),
+        ("ai_daftar_run", {}, "403"),
+        ("ai_detail_run", {"run_id": "x"}, "404"),
+    ],
+)
+async def test_tool_ai_galat_backend_jadi_tool_error(tool, args, kode):
+    from fastmcp.exceptions import ToolError
+
+    from anjab_abk_mcp.client import BackendError
+
+    with patch(_GET, new_callable=AsyncMock, side_effect=BackendError(f"Backend error {kode}: x")):
+        async with Client(mcp) as client:
+            with pytest.raises(ToolError) as exc_info:
+                await client.call_tool(tool, args)
+    assert kode in str(exc_info.value)
