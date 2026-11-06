@@ -6,6 +6,8 @@ dan project ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-06
+
 ### Ditambahkan
 
 - Tool baca `narasi_hitungan_antrean`: hitungan kasus antrean tinjauan narasi per status
